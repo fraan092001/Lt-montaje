@@ -263,10 +263,13 @@
                 if(!file) return;
                 let reader = new FileReader();
                 reader.onload = function(ev) {
-                    let wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array'});
+                    // Agregamos cellDates: true para que lea bien las fechas de Excel
+                    let wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', cellDates: true});
                     let json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header: 1});
                     
                     let nuevasTareas = [];
+                    let nuevoHistorial = { ...historialLT }; // Mantiene lo que ya había en la nube
+
                     for(let i=0; i<json.length; i++) { 
                         if(i === 0) continue; 
                         if(json[i][0]) {
@@ -283,13 +286,42 @@
                                 duracion: parseFloat(json[i][3]) || 0.5, 
                                 frecuencia: parseInt(json[i][4]) || 7 
                             });
+
+                            // NUEVA LÓGICA: Leer Columna F (índice 5) para la fecha histórica
+                            let fechaExcel = json[i][5];
+                            if (fechaExcel) {
+                                let fechaFormateada = "";
+                                if (fechaExcel instanceof Date) {
+                                    // Si Excel lo pasa como objeto de fecha
+                                    fechaFormateada = fechaExcel.toISOString().split('T')[0];
+                                } else if (typeof fechaExcel === 'string') {
+                                    // Si es un texto tipo DD/MM/YYYY
+                                    if (fechaExcel.includes('/')) {
+                                        let partes = fechaExcel.split('/');
+                                        if(partes[0].length <= 2) { // Asume formato día/mes/año
+                                            fechaFormateada = `${partes[2]}-${partes[1].padStart(2,'0')}-${partes[0].padStart(2,'0')}`;
+                                        } else { // Asume año/mes/día
+                                            fechaFormateada = fechaExcel.replace(/\//g, '-');
+                                        }
+                                    } else {
+                                        fechaFormateada = fechaExcel; // Si ya viene YYYY-MM-DD
+                                    }
+                                }
+                                
+                                // Si logró armar una fecha válida, la guarda en el historial de Firebase
+                                if (fechaFormateada && fechaFormateada.length === 10) {
+                                    nuevoHistorial[idFijo] = fechaFormateada;
+                                }
+                            }
                         }
                     }
                     
                     let statusImp = document.getElementById('statusImport');
                     if(statusImp) statusImp.classList.remove('hidden');
                     
-                    db.ref('lt_data/baseTareas').set(nuevasTareas).then(() => {
+                    // Guarda ambas cosas: la matriz y las fechas históricas
+                    db.ref('lt_data/baseTareas').set(nuevasTareas);
+                    db.ref('lt_data/historialLT').set(nuevoHistorial).then(() => {
                         setTimeout(() => {
                             if(statusImp) statusImp.classList.add('hidden');
                             fileInput.value = ""; 
