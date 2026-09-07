@@ -263,55 +263,57 @@
                 if(!file) return;
                 let reader = new FileReader();
                 reader.onload = function(ev) {
-                    // Agregamos cellDates: true para que lea bien las fechas de Excel
                     let wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', cellDates: true});
                     let json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header: 1});
                     
                     let nuevasTareas = [];
-                    let nuevoHistorial = { ...historialLT }; // Mantiene lo que ya había en la nube
+                    let nuevoHistorial = { ...historialLT };
 
                     for(let i=0; i<json.length; i++) { 
                         if(i === 0) continue; 
-                        if(json[i][0]) {
-                            let linea = json[i][0] || '-';
-                            let maquina = json[i][1] || '-';
-                            let actividad = json[i][2] || '-';
-                            let idFijo = generarIdTarea(linea, maquina, actividad);
+                        
+                        let valLinea = json[i][0] ? String(json[i][0]).trim() : '';
+                        
+                        // FILTRO ANTI-FANTASMAS: Destruye filas vacías o títulos del Excel
+                        if(!valLinea || valLinea.toLowerCase() === 'linea' || valLinea.toLowerCase() === 'línea') continue;
 
-                            nuevasTareas.push({
-                                id: idFijo, 
-                                linea: linea, 
-                                maquina: maquina, 
-                                actividad: actividad, 
-                                duracion: parseFloat(json[i][3]) || 0.5, 
-                                frecuencia: parseInt(json[i][4]) || 7 
-                            });
+                        let maquina = json[i][1] ? String(json[i][1]).trim() : '-';
+                        let actividad = json[i][2] ? String(json[i][2]).trim() : '-';
+                        let idFijo = generarIdTarea(valLinea, maquina, actividad);
 
-                            // NUEVA LÓGICA: Leer Columna F (índice 5) para la fecha histórica
-                            let fechaExcel = json[i][5];
-                            if (fechaExcel) {
-                                let fechaFormateada = "";
-                                if (fechaExcel instanceof Date) {
-                                    // Si Excel lo pasa como objeto de fecha
-                                    fechaFormateada = fechaExcel.toISOString().split('T')[0];
-                                } else if (typeof fechaExcel === 'string') {
-                                    // Si es un texto tipo DD/MM/YYYY
-                                    if (fechaExcel.includes('/')) {
-                                        let partes = fechaExcel.split('/');
-                                        if(partes[0].length <= 2) { // Asume formato día/mes/año
-                                            fechaFormateada = `${partes[2]}-${partes[1].padStart(2,'0')}-${partes[0].padStart(2,'0')}`;
-                                        } else { // Asume año/mes/día
-                                            fechaFormateada = fechaExcel.replace(/\//g, '-');
-                                        }
-                                    } else {
-                                        fechaFormateada = fechaExcel; // Si ya viene YYYY-MM-DD
-                                    }
+                        nuevasTareas.push({
+                            id: idFijo, 
+                            linea: valLinea, 
+                            maquina: maquina, 
+                            actividad: actividad, 
+                            duracion: parseFloat(json[i][3]) || 0.5, 
+                            frecuencia: parseInt(json[i][4]) || 7 
+                        });
+
+                        // DECODIFICADOR DE FECHAS EXCEL
+                        let fechaExcel = json[i][5];
+                        if (fechaExcel) {
+                            let fechaFormateada = "";
+                            
+                            if (typeof fechaExcel === 'number') {
+                                // Convierte el número de serie oculto de Excel a fecha real
+                                let jsDate = new Date(Math.round((fechaExcel - 25569) * 86400 * 1000));
+                                fechaFormateada = jsDate.toISOString().split('T')[0];
+                            } else if (fechaExcel instanceof Date) {
+                                fechaFormateada = fechaExcel.toISOString().split('T')[0];
+                            } else if (typeof fechaExcel === 'string') {
+                                let txt = fechaExcel.trim();
+                                if (txt.includes('/')) {
+                                    let p = txt.split('/');
+                                    if(p[0].length <= 2) fechaFormateada = `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+                                    else fechaFormateada = txt.replace(/\//g, '-');
+                                } else {
+                                    fechaFormateada = txt; 
                                 }
-                                
-                                // Si logró armar una fecha válida, la guarda en el historial de Firebase
-                                if (fechaFormateada && fechaFormateada.length === 10) {
-                                    nuevoHistorial[idFijo] = fechaFormateada;
-                                }
+                            }
+                            
+                            if (fechaFormateada && fechaFormateada.length === 10) {
+                                nuevoHistorial[idFijo] = fechaFormateada;
                             }
                         }
                     }
@@ -319,7 +321,6 @@
                     let statusImp = document.getElementById('statusImport');
                     if(statusImp) statusImp.classList.remove('hidden');
                     
-                    // Guarda ambas cosas: la matriz y las fechas históricas
                     db.ref('lt_data/baseTareas').set(nuevasTareas);
                     db.ref('lt_data/historialLT').set(nuevoHistorial).then(() => {
                         setTimeout(() => {
