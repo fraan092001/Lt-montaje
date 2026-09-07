@@ -164,13 +164,12 @@
             return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
         }
 
-       db.ref('lt_data').on('value', (snapshot) => {
+        db.ref('lt_data').on('value', (snapshot) => {
             const data = snapshot.val() || {};
             baseTareas = data.baseTareas || [];
             historialLT = data.historialLT || {};
             reprogramadasLT = data.reprogramadasLT || {};
             
-            // PARCHE: Forzar que Firebase lea las reglas siempre como Lista
             let reglasCrudas = data.reglasGrupos || [];
             reglasGrupos = Array.isArray(reglasCrudas) ? reglasCrudas : Object.values(reglasCrudas);
             
@@ -195,23 +194,8 @@
             if(currentTab === 'auditoria') generarMatrizMes();
             if(currentTab === 'config') renderizarGrupos();
         });
-            let infoBase = document.getElementById('infoBase');
-            if(infoBase) {
-                if(baseTareas.length > 0) {
-                    infoBase.innerHTML = `<span class="text-green-600 font-bold"><i class="fa-solid fa-check-circle mr-1"></i> Base Activa:</span> ${baseTareas.length} tareas cargadas en la nube. Operando normalmente.`;
-                    infoBase.className = "text-sm font-medium text-gray-700 bg-green-50 p-4 rounded border border-green-200 mb-4";
-                } else {
-                    infoBase.innerHTML = `<span class="text-amber-600 font-bold"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Base Vacía:</span> Por favor, subí tu archivo Excel por única vez abajo.`;
-                    infoBase.className = "text-sm font-medium text-gray-700 bg-amber-50 p-4 rounded border border-amber-200 mb-4";
-                }
-            }
 
-            if(currentTab === 'dashboard') recalcularPlan();
-            if(currentTab === 'auditoria') generarMatrizMes();
-            if(currentTab === 'config') renderizarGrupos();
-        });
-
-     function switchTab(tab) {
+        function switchTab(tab) {
             currentTab = tab;
             document.getElementById('view-dashboard').classList.toggle('hidden', tab !== 'dashboard');
             document.getElementById('view-auditoria').classList.toggle('hidden', tab !== 'auditoria');
@@ -388,12 +372,11 @@
 
             planActualVista = [];
             let hC = 0, hK = 0, hTotal = 0;
-            let tolerancia = 0.5; // Margen estricto de 30 minutos extras para no desbandar el turno
+            let tolerancia = 0.5;
 
             for(let t of tareasHoy) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
                 
-                // 1. PRIORIDADES (Críticas, Agrupadas o Reprogramadas): Ignoran el porcentaje del slider, pero respetan el límite global.
                 if (t.esCritica || t.esFijadaHoy || t.esRepro) {
                     if (hTotal + t.duracion <= capHoras + tolerancia) {
                         planActualVista.push(t);
@@ -401,7 +384,6 @@
                         hTotal += t.duracion;
                     }
                 } 
-                // 2. RELLENO (Tareas normales): Solo entran si respetan el porcentaje del slider Y el límite global.
                 else {
                     if (esCronos) {
                         if ((hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
