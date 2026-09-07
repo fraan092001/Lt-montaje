@@ -288,30 +288,33 @@
                             frecuencia: parseInt(json[i][4]) || 7 
                         });
 
-                        // DECODIFICADOR ROBUSTO DE FECHAS (CON CORRECCIÓN DE ZONA HORARIA)
+                        // LECTOR DE FECHAS A PRUEBA DE ZONAS HORARIAS
                         let fechaExcel = json[i][5];
                         if (fechaExcel) {
                             let fechaFormateada = "";
-                            
-                            if (typeof fechaExcel === 'number') {
-                                // Ajuste UTC para anular el GMT-3 y evitar que reste un día
-                                let jsDate = new Date(Math.round((fechaExcel - 25569) * 86400 * 1000));
-                                jsDate.setMinutes(jsDate.getMinutes() + jsDate.getTimezoneOffset());
-                                fechaFormateada = jsDate.toISOString().split('T')[0];
-                            } else if (fechaExcel instanceof Date) {
-                                let jsDate = new Date(fechaExcel);
-                                jsDate.setMinutes(jsDate.getMinutes() + jsDate.getTimezoneOffset());
-                                fechaFormateada = jsDate.toISOString().split('T')[0];
-                            } else if (typeof fechaExcel === 'string') {
-                                let txt = fechaExcel.trim();
-                                if (txt.includes('/')) {
-                                    let p = txt.split('/');
-                                    if(p[0].length <= 2) fechaFormateada = `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
-                                    else fechaFormateada = txt.replace(/\//g, '-');
-                                } else {
-                                    fechaFormateada = txt; 
+                            try {
+                                if (fechaExcel instanceof Date) {
+                                    let y = fechaExcel.getFullYear();
+                                    let m = String(fechaExcel.getMonth() + 1).padStart(2, '0');
+                                    let d = String(fechaExcel.getDate()).padStart(2, '0');
+                                    fechaFormateada = `${y}-${m}-${d}`;
+                                } else if (typeof fechaExcel === 'number') {
+                                    let jsDate = new Date(Math.round((fechaExcel - 25569) * 86400 * 1000));
+                                    let y = jsDate.getUTCFullYear();
+                                    let m = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
+                                    let d = String(jsDate.getUTCDate()).padStart(2, '0');
+                                    fechaFormateada = `${y}-${m}-${d}`;
+                                } else if (typeof fechaExcel === 'string') {
+                                    let txt = fechaExcel.trim();
+                                    if (txt.includes('/')) {
+                                        let p = txt.split('/');
+                                        if(p[0].length <= 2) fechaFormateada = `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+                                        else fechaFormateada = txt.replace(/\//g, '-');
+                                    } else {
+                                        fechaFormateada = txt; 
+                                    }
                                 }
-                            }
+                            } catch(e) {}
                             
                             if (fechaFormateada && fechaFormateada.length === 10) {
                                 nuevoHistorial[idFijo] = fechaFormateada;
@@ -408,42 +411,31 @@
             let hC = 0, hK = 0, hTotal = 0;
             let tolerancia = 0.5;
 
+            // REGLA SUPREMA: Nada supera al Slider. Ni siquiera los grupos.
             for(let t of tareasHoy) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
+                let entra = false;
                 
-                // --- VETO ABSOLUTO DEL SLIDER ---
-                // Le devuelve el control manual al usuario para bloquear una línea completa.
-                if (esCronos && pctCronos === 0) continue; 
-                if (!esCronos && pctCronos === 100) continue; 
-                // --------------------------------
+                if (esCronos) {
+                    if ((hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
+                        entra = true;
+                    }
+                } else {
+                    if ((hK + t.duracion <= maxKP1 + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
+                        entra = true;
+                    }
+                }
 
-                if (t.esCritica || t.esFijadaHoy || t.esRepro) {
-                    if (hTotal + t.duracion <= capHoras + tolerancia) {
-                        planActualVista.push(t);
-                        if (esCronos) hC += t.duracion; else hK += t.duracion;
-                        hTotal += t.duracion;
-                    }
-                } 
-                else {
-                    if (esCronos) {
-                        if ((hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
-                            planActualVista.push(t);
-                            hC += t.duracion;
-                            hTotal += t.duracion;
-                        }
-                    } else {
-                        if ((hK + t.duracion <= maxKP1 + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
-                            planActualVista.push(t);
-                            hK += t.duracion;
-                            hTotal += t.duracion;
-                        }
-                    }
+                if (entra) {
+                    planActualVista.push(t);
+                    if (esCronos) hC += t.duracion; else hK += t.duracion;
+                    hTotal += t.duracion;
                 }
             }
 
             tbody.innerHTML = '';
             if(planActualVista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-green-600 font-bold bg-green-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Capacidad completa o línea bloqueada por el usuario.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-green-600 font-bold bg-green-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Capacidad completa o línea bloqueada por tu Slider.</td></tr>';
                 return;
             }
 
