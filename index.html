@@ -164,12 +164,15 @@
             return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
         }
 
-        db.ref('lt_data').on('value', (snapshot) => {
+       db.ref('lt_data').on('value', (snapshot) => {
             const data = snapshot.val() || {};
             baseTareas = data.baseTareas || [];
-            reglasGrupos = data.reglasGrupos || [];
             historialLT = data.historialLT || {};
             reprogramadasLT = data.reprogramadasLT || {};
+            
+            // PARCHE: Forzar que Firebase lea las reglas siempre como Lista
+            let reglasCrudas = data.reglasGrupos || [];
+            reglasGrupos = Array.isArray(reglasCrudas) ? reglasCrudas : Object.values(reglasCrudas);
             
             let badgeNube = document.getElementById('status-nube');
             if(badgeNube) {
@@ -177,6 +180,21 @@
                 badgeNube.innerHTML = '<i class="fa-solid fa-cloud-check mr-1"></i> Sincronizado';
             }
 
+            let infoBase = document.getElementById('infoBase');
+            if(infoBase) {
+                if(baseTareas.length > 0) {
+                    infoBase.innerHTML = `<span class="text-green-600 font-bold"><i class="fa-solid fa-check-circle mr-1"></i> Base Activa:</span> ${baseTareas.length} tareas cargadas en la nube. Operando normalmente.`;
+                    infoBase.className = "text-sm font-medium text-gray-700 bg-green-50 p-4 rounded border border-green-200 mb-4";
+                } else {
+                    infoBase.innerHTML = `<span class="text-amber-600 font-bold"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Base Vacía:</span> Por favor, subí tu archivo Excel por única vez abajo.`;
+                    infoBase.className = "text-sm font-medium text-gray-700 bg-amber-50 p-4 rounded border border-amber-200 mb-4";
+                }
+            }
+
+            if(currentTab === 'dashboard') recalcularPlan();
+            if(currentTab === 'auditoria') generarMatrizMes();
+            if(currentTab === 'config') renderizarGrupos();
+        });
             let infoBase = document.getElementById('infoBase');
             if(infoBase) {
                 if(baseTareas.length > 0) {
