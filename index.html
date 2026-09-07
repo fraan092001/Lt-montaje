@@ -7,7 +7,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Firebase Compat SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-database-compat.js"></script>
 
@@ -34,7 +33,7 @@
             <button onclick="switchTab('config')" id="tab-config" class="tab-inactive py-4">Configuración y Reglas</button>
         </div>
 
-        <!-- PESTAÑA 1: Dashboard Diario/Semanal -->
+        <!-- PESTAÑA 1 -->
         <div id="view-dashboard" class="p-6 space-y-6">
             <div class="flex space-x-2 border-b pb-4" id="botonesDias"></div>
 
@@ -79,7 +78,7 @@
             </div>
         </div>
 
-        <!-- PESTAÑA 2: Auditoría (Matriz Mensual) -->
+        <!-- PESTAÑA 2 -->
         <div id="view-auditoria" class="hidden p-6 space-y-6">
             <div class="flex justify-between items-center mb-4">
                 <div>
@@ -98,10 +97,8 @@
             </div>
         </div>
 
-        <!-- PESTAÑA 3: Configuración -->
+        <!-- PESTAÑA 3 -->
         <div id="view-config" class="hidden p-6 space-y-6">
-            
-            <!-- Estado de la Base de Datos -->
             <div class="bg-white border rounded-lg shadow-sm p-6">
                 <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-database mr-2 text-blue-600"></i> Estado de la Base Maestra</h3>
                 <div id="infoBase" class="text-sm font-medium text-gray-600 bg-gray-50 p-4 rounded border mb-4">
@@ -137,7 +134,6 @@
     </div>
 
     <script>
-        // CONFIGURACIÓN DE FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyDMuDQv1ciCW8iovyvsBEzKb0DloM5gZUA",
             authDomain: "lt-stellantis-montaje.firebaseapp.com",
@@ -163,7 +159,6 @@
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
         const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes"};
 
-        // Creador de ID Inteligente (Mantiene historial aunque cambie el orden del Excel)
         function generarIdTarea(linea, maquina, actividad) {
             let str = linea + "_" + maquina + "_" + actividad;
             return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
@@ -176,7 +171,6 @@
             historialLT = data.historialLT || {};
             reprogramadasLT = data.reprogramadasLT || {};
             
-            // UI Status
             let badgeNube = document.getElementById('status-nube');
             if(badgeNube) {
                 badgeNube.className = "text-xs bg-emerald-500 px-2 py-1 rounded font-bold";
@@ -295,7 +289,7 @@
                     db.ref('lt_data/baseTareas').set(nuevasTareas).then(() => {
                         setTimeout(() => {
                             if(statusImp) statusImp.classList.add('hidden');
-                            fileInput.value = ""; // Limpiar input
+                            fileInput.value = ""; 
                             switchTab('dashboard');
                         }, 2000);
                     });
@@ -331,7 +325,10 @@
                 let tocaHoy = (movidaPara === fechaSimulada) || (diasPasados >= t.frecuencia);
                 if(ultVez === fechaSimulada || (ultVez && ultVez > fechaSimulada)) tocaHoy = false;
 
-                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false};
+                let esCritica = diasPasados >= (t.frecuencia * 1.30);
+                if(esCritica && (ultVez || diasPasados !== 999)) tocaHoy = true;
+
+                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica};
             });
 
             for(let regla of reglasGrupos) {
@@ -361,6 +358,8 @@
             let tareasHoy = tareasEvaluadas.filter(t => t.tocaHoy);
 
             tareasHoy.sort((a, b) => {
+                if(a.esCritica && !b.esCritica) return -1;
+                if(!a.esCritica && b.esCritica) return 1;
                 if(a.esFijadaHoy && !b.esFijadaHoy) return -1;
                 if(!a.esFijadaHoy && b.esFijadaHoy) return 1;
                 if(a.esRepro && !b.esRepro) return -1;
@@ -369,11 +368,36 @@
             });
 
             planActualVista = [];
-            let hC = 0, hK = 0;
+            let hC = 0, hK = 0, hTotal = 0;
+            let tolerancia = 0.5; // Margen estricto de 30 minutos extras para no desbandar el turno
+
             for(let t of tareasHoy) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
-                if(esCronos && (hC + t.duracion <= maxCronos)) { planActualVista.push(t); hC += t.duracion; } 
-                else if(!esCronos && (hK + t.duracion <= maxKP1)) { planActualVista.push(t); hK += t.duracion; }
+                
+                // 1. PRIORIDADES (Críticas, Agrupadas o Reprogramadas): Ignoran el porcentaje del slider, pero respetan el límite global.
+                if (t.esCritica || t.esFijadaHoy || t.esRepro) {
+                    if (hTotal + t.duracion <= capHoras + tolerancia) {
+                        planActualVista.push(t);
+                        if (esCronos) hC += t.duracion; else hK += t.duracion;
+                        hTotal += t.duracion;
+                    }
+                } 
+                // 2. RELLENO (Tareas normales): Solo entran si respetan el porcentaje del slider Y el límite global.
+                else {
+                    if (esCronos) {
+                        if ((hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
+                            planActualVista.push(t);
+                            hC += t.duracion;
+                            hTotal += t.duracion;
+                        }
+                    } else {
+                        if ((hK + t.duracion <= maxKP1 + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
+                            planActualVista.push(t);
+                            hK += t.duracion;
+                            hTotal += t.duracion;
+                        }
+                    }
+                }
             }
 
             tbody.innerHTML = '';
@@ -387,8 +411,10 @@
             planActualVista.forEach(t => {
                 let badgeColor = t.linea.toUpperCase().includes('KP1') ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800';
                 let reproTag = '';
-                if (t.esFijadaHoy) reproTag = `<span class="ml-2 text-[10px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded uppercase font-bold">Agrupada / Fija</span>`;
-                else if (t.esRepro) reproTag = `<span class="ml-2 text-[10px] bg-red-100 text-red-700 px-1 py-0.5 rounded uppercase font-bold">Reprogramada</span>`;
+                
+                if (t.esCritica && (t.diasPasados !== 999)) reproTag = `<span class="ml-2 text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded uppercase font-bold animate-pulse"><i class="fa-solid fa-triangle-exclamation"></i> Crítica</span>`;
+                else if (t.esFijadaHoy) reproTag = `<span class="ml-2 text-[10px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded uppercase font-bold">Agrupada</span>`;
+                else if (t.esRepro) reproTag = `<span class="ml-2 text-[10px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded uppercase font-bold">Reprogramada</span>`;
                 
                 let botonesAccion = esHoy ? `
                     <button onclick="marcarCumplida('${t.id}', this)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click">Cumplida</button>
