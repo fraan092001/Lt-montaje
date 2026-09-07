@@ -193,7 +193,7 @@
             if(currentTab === 'config') renderizarGrupos();
         });
 
-        function switchTab(tab) {
+     function switchTab(tab) {
             currentTab = tab;
             document.getElementById('view-dashboard').classList.toggle('hidden', tab !== 'dashboard');
             document.getElementById('view-auditoria').classList.toggle('hidden', tab !== 'auditoria');
@@ -208,6 +208,7 @@
                 fechaSimulada = getFechaHoy();
                 renderizarBotonesDias();
             }
+            if(tab === 'config') renderizarGrupos();
         }
 
         function actualizarLabelMezcla() {
