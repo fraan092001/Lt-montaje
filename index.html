@@ -273,8 +273,6 @@
                         if(i === 0) continue; 
                         
                         let valLinea = json[i][0] ? String(json[i][0]).trim() : '';
-                        
-                        // FILTRO ANTI-FANTASMAS: Destruye filas vacías o títulos del Excel
                         if(!valLinea || valLinea.toLowerCase() === 'linea' || valLinea.toLowerCase() === 'línea') continue;
 
                         let maquina = json[i][1] ? String(json[i][1]).trim() : '-';
@@ -290,17 +288,20 @@
                             frecuencia: parseInt(json[i][4]) || 7 
                         });
 
-                        // DECODIFICADOR DE FECHAS EXCEL
+                        // DECODIFICADOR ROBUSTO DE FECHAS (CON CORRECCIÓN DE ZONA HORARIA)
                         let fechaExcel = json[i][5];
                         if (fechaExcel) {
                             let fechaFormateada = "";
                             
                             if (typeof fechaExcel === 'number') {
-                                // Convierte el número de serie oculto de Excel a fecha real
+                                // Ajuste UTC para anular el GMT-3 y evitar que reste un día
                                 let jsDate = new Date(Math.round((fechaExcel - 25569) * 86400 * 1000));
+                                jsDate.setMinutes(jsDate.getMinutes() + jsDate.getTimezoneOffset());
                                 fechaFormateada = jsDate.toISOString().split('T')[0];
                             } else if (fechaExcel instanceof Date) {
-                                fechaFormateada = fechaExcel.toISOString().split('T')[0];
+                                let jsDate = new Date(fechaExcel);
+                                jsDate.setMinutes(jsDate.getMinutes() + jsDate.getTimezoneOffset());
+                                fechaFormateada = jsDate.toISOString().split('T')[0];
                             } else if (typeof fechaExcel === 'string') {
                                 let txt = fechaExcel.trim();
                                 if (txt.includes('/')) {
@@ -410,6 +411,12 @@
             for(let t of tareasHoy) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
                 
+                // --- VETO ABSOLUTO DEL SLIDER ---
+                // Le devuelve el control manual al usuario para bloquear una línea completa.
+                if (esCronos && pctCronos === 0) continue; 
+                if (!esCronos && pctCronos === 100) continue; 
+                // --------------------------------
+
                 if (t.esCritica || t.esFijadaHoy || t.esRepro) {
                     if (hTotal + t.duracion <= capHoras + tolerancia) {
                         planActualVista.push(t);
@@ -436,7 +443,7 @@
 
             tbody.innerHTML = '';
             if(planActualVista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-green-600 font-bold bg-green-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Capacidad completa o sin pendientes.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-green-600 font-bold bg-green-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Capacidad completa o línea bloqueada por el usuario.</td></tr>';
                 return;
             }
 
