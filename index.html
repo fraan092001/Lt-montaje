@@ -155,6 +155,9 @@
         let fechaSimulada = getFechaHoy(); 
         let planActualVista = []; 
         let currentTab = 'dashboard';
+        
+        // NUEVO: Memoria temporal para tareas rotadas
+        let tareasOmitidasHoy = [];
 
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
         const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes"};
@@ -208,6 +211,7 @@
             if(tab === 'auditoria') generarMatrizMes();
             if(tab === 'dashboard') {
                 fechaSimulada = getFechaHoy();
+                tareasOmitidasHoy = []; // Resetea las omitidas al cambiar de pestaña
                 renderizarBotonesDias();
             }
             if(tab === 'config') renderizarGrupos();
@@ -253,6 +257,7 @@
 
         function seleccionarDia(dateStr) {
             fechaSimulada = dateStr;
+            tareasOmitidasHoy = []; // Al cambiar de día se blanquea la rotación
             renderizarBotonesDias();
         }
 
@@ -288,7 +293,6 @@
                             frecuencia: parseInt(json[i][4]) || 7 
                         });
 
-                        // LECTOR DE FECHAS A PRUEBA DE ZONAS HORARIAS
                         let fechaExcel = json[i][5];
                         if (fechaExcel) {
                             let fechaFormateada = "";
@@ -395,7 +399,8 @@
                 }
             }
 
-            let tareasHoy = tareasEvaluadas.filter(t => t.tocaHoy);
+            // NUEVO: Filtramos también las tareas que el usuario rotó manualmente hoy
+            let tareasHoy = tareasEvaluadas.filter(t => t.tocaHoy && !tareasOmitidasHoy.includes(t.id));
 
             tareasHoy.sort((a, b) => {
                 if(a.esCritica && !b.esCritica) return -1;
@@ -411,9 +416,13 @@
             let hC = 0, hK = 0, hTotal = 0;
             let tolerancia = 0.5;
 
-            // REGLA SUPREMA: Nada supera al Slider. Ni siquiera los grupos.
             for(let t of tareasHoy) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
+                
+                // VETO DEL SLIDER
+                if (esCronos && pctCronos === 0) continue; 
+                if (!esCronos && pctCronos === 100) continue; 
+
                 let entra = false;
                 
                 if (esCronos) {
@@ -451,6 +460,7 @@
                 
                 let botonesAccion = esHoy ? `
                     <button onclick="marcarCumplida('${t.id}', this)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click">Cumplida</button>
+                    <button onclick="cambiarTarea('${t.id}')" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click" title="Ocultar de hoy y traer otra"><i class="fa-solid fa-rotate mr-1"></i> Rotar</button>
                     <button onclick="marcarReprogramada('${t.id}', this)" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click">Patear a Mañana</button>
                 ` : `<span class="text-xs text-gray-400 font-bold"><i class="fa-solid fa-lock mr-1"></i> Solo editable en (Hoy)</span>`;
 
@@ -466,6 +476,12 @@
                     </tr>
                 `;
             });
+        }
+
+        // NUEVA FUNCIÓN: Agrega la tarea a la lista de "omitidas" y recalcula
+        function cambiarTarea(id) {
+            tareasOmitidasHoy.push(id);
+            recalcularPlan();
         }
 
         function copiarParteDiario(btn) {
