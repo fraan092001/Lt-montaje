@@ -17,6 +17,8 @@
         .day-inactive { background-color: white; color: #374151; border-color: #d1d5db;}
         .btn-click { transition: transform 0.1s ease-in-out, background-color 0.2s; }
         .btn-click:active { transform: scale(0.92); }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans p-6">
@@ -40,14 +42,14 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100 items-end">
                 <div>
                     <label class="block text-xs font-bold text-gray-500 uppercase">Capacidad (Hs)</label>
-                    <input type="number" id="inputHoras" value="8" class="mt-1 block w-full rounded border-gray-300 p-2 text-sm shadow-sm" onchange="recalcularPlan()">
+                    <input type="number" id="inputHoras" value="8" class="mt-1 block w-full rounded border-gray-300 p-2 text-sm shadow-sm" onchange="animarRecalculo()">
                 </div>
                 <div class="col-span-1">
                     <label class="block text-xs font-bold text-gray-500 uppercase">Mezcla: <span id="labelMezcla" class="text-blue-700">50% Cronos / 50% KP1</span></label>
-                    <input type="range" id="sliderMezcla" min="0" max="100" value="50" class="mt-3 w-full cursor-pointer" oninput="actualizarLabelMezcla(); recalcularPlan();">
+                    <input type="range" id="sliderMezcla" min="0" max="100" value="50" class="mt-3 w-full cursor-pointer" oninput="actualizarLabelMezcla(); animarRecalculo();">
                 </div>
                 <div>
-                    <button onclick="recalcularPlan()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded shadow-sm btn-click">
+                    <button id="btnRecalcular" onclick="animarRecalculo()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded shadow-sm btn-click transition-colors">
                         <i class="fa-solid fa-rotate mr-2"></i> Recalcular Turno
                     </button>
                 </div>
@@ -60,7 +62,7 @@
                         <i class="fa-solid fa-copy mr-2"></i> Copiar para Excel
                     </button>
                 </div>
-                <div class="border rounded-lg overflow-hidden">
+                <div class="border rounded-lg overflow-hidden relative">
                     <table class="w-full text-left text-sm border-collapse">
                         <thead>
                             <tr class="bg-gray-100 border-b">
@@ -70,7 +72,7 @@
                                 <th class="p-3 text-right">Acciones Operativas</th>
                             </tr>
                         </thead>
-                        <tbody id="tablaTareas" class="divide-y bg-white">
+                        <tbody id="tablaTareas" class="divide-y bg-white fade-in">
                             <tr><td colspan="4" class="p-8 text-center text-gray-500"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Sincronizando con la base de datos...</td></tr>
                         </tbody>
                     </table>
@@ -156,7 +158,6 @@
         let planActualVista = []; 
         let currentTab = 'dashboard';
         
-        // NUEVO: Memoria temporal para tareas rotadas
         let tareasOmitidasHoy = [];
 
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -211,7 +212,7 @@
             if(tab === 'auditoria') generarMatrizMes();
             if(tab === 'dashboard') {
                 fechaSimulada = getFechaHoy();
-                tareasOmitidasHoy = []; // Resetea las omitidas al cambiar de pestaña
+                tareasOmitidasHoy = []; 
                 renderizarBotonesDias();
             }
             if(tab === 'config') renderizarGrupos();
@@ -257,10 +258,11 @@
 
         function seleccionarDia(dateStr) {
             fechaSimulada = dateStr;
-            tareasOmitidasHoy = []; // Al cambiar de día se blanquea la rotación
+            tareasOmitidasHoy = []; 
             renderizarBotonesDias();
         }
 
+        // LECTOR DE EXCEL INTELIGENTE (AUTO-MAPEO DE COLUMNAS)
         let fileInput = document.getElementById('fileImport');
         if(fileInput) {
             fileInput.addEventListener('change', function(e) {
@@ -269,31 +271,70 @@
                 let reader = new FileReader();
                 reader.onload = function(ev) {
                     let wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', cellDates: true});
-                    let json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header: 1});
+                    let sheet = wb.Sheets[wb.SheetNames[0]];
+                    let json = XLSX.utils.sheet_to_json(sheet, {header: 1});
                     
+                    if(json.length < 2) {
+                        alert("El Excel parece estar vacío.");
+                        return;
+                    }
+
+                    // 1. Encontrar la fila de los títulos (headers)
+                    let headerRow = 0;
+                    for(let r = 0; r < 5; r++) { 
+                        if(json[r] && json[r].length > 2) {
+                            let rowStr = json[r].join(" ").toLowerCase();
+                            if(rowStr.includes("linea") || rowStr.includes("línea") || rowStr.includes("maquina") || rowStr.includes("máquina")) {
+                                headerRow = r;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 2. Mapear en qué número de columna está cada cosa
+                    let headers = json[headerRow].map(h => String(h || "").toLowerCase().trim());
+                    let cLin = headers.findIndex(h => h.includes('linea') || h.includes('línea'));
+                    let cMaq = headers.findIndex(h => h.includes('maquina') || h.includes('máquina'));
+                    let cAct = headers.findIndex(h => h.includes('actividad') || h.includes('tarea'));
+                    let cDur = headers.findIndex(h => h.includes('duracion') || h.includes('duración') || h.includes('hs'));
+                    let cFre = headers.findIndex(h => h.includes('frec') || h.includes('dias') || h.includes('días'));
+                    let cFec = headers.findIndex(h => h.includes('fecha') || h.includes('ultimo') || h.includes('último') || h.includes('última'));
+                    
+                    // Fallbacks por si el título es raro
+                    if(cLin === -1) cLin = 0;
+                    if(cMaq === -1) cMaq = 1;
+                    if(cAct === -1) cAct = 2;
+                    if(cDur === -1) cDur = 3;
+                    if(cFre === -1) cFre = 4;
+                    if(cFec === -1) cFec = 5;
+
                     let nuevasTareas = [];
                     let nuevoHistorial = { ...historialLT };
 
-                    for(let i=0; i<json.length; i++) { 
-                        if(i === 0) continue; 
+                    // 3. Extraer los datos reales saltando los títulos
+                    for(let i = headerRow + 1; i < json.length; i++) { 
+                        if(!json[i] || json[i].length === 0) continue; 
                         
-                        let valLinea = json[i][0] ? String(json[i][0]).trim() : '';
-                        if(!valLinea || valLinea.toLowerCase() === 'linea' || valLinea.toLowerCase() === 'línea') continue;
+                        let valLinea = json[i][cLin] ? String(json[i][cLin]).trim() : '';
+                        if(!valLinea || valLinea.toLowerCase() === 'linea') continue;
 
-                        let maquina = json[i][1] ? String(json[i][1]).trim() : '-';
-                        let actividad = json[i][2] ? String(json[i][2]).trim() : '-';
+                        let maquina = json[i][cMaq] ? String(json[i][cMaq]).trim() : '-';
+                        let actividad = json[i][cAct] ? String(json[i][cAct]).trim() : '-';
                         let idFijo = generarIdTarea(valLinea, maquina, actividad);
 
+                        let durStr = String(json[i][cDur] || '0.5').replace(',','.');
+                        
                         nuevasTareas.push({
                             id: idFijo, 
                             linea: valLinea, 
                             maquina: maquina, 
                             actividad: actividad, 
-                            duracion: parseFloat(json[i][3]) || 0.5, 
-                            frecuencia: parseInt(json[i][4]) || 7 
+                            duracion: parseFloat(durStr) || 0.5, 
+                            frecuencia: parseInt(json[i][cFre]) || 7 
                         });
 
-                        let fechaExcel = json[i][5];
+                        // Procesar Fechas
+                        let fechaExcel = json[i][cFec];
                         if (fechaExcel) {
                             let fechaFormateada = "";
                             try {
@@ -310,6 +351,9 @@
                                     fechaFormateada = `${y}-${m}-${d}`;
                                 } else if (typeof fechaExcel === 'string') {
                                     let txt = fechaExcel.trim();
+                                    // Ignorar si dice "Pendiente" o no tiene formato de fecha
+                                    if (txt.toLowerCase() === 'pendiente' || txt.toLowerCase() === 'realizado') continue;
+                                    
                                     if (txt.includes('/')) {
                                         let p = txt.split('/');
                                         if(p[0].length <= 2) fechaFormateada = `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
@@ -342,6 +386,28 @@
             });
         }
 
+        // ANIMACIÓN VISUAL PARA EL BOTÓN
+        function animarRecalculo() {
+            let btn = document.getElementById('btnRecalcular');
+            let tabla = document.getElementById('tablaTareas');
+            
+            // Efecto de carga
+            if(btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando...';
+            if(tabla) {
+                tabla.classList.remove('fade-in');
+                tabla.style.opacity = '0.5';
+            }
+
+            setTimeout(() => {
+                recalcularPlan();
+                if(btn) btn.innerHTML = '<i class="fa-solid fa-rotate mr-2"></i> Recalcular Turno';
+                if(tabla) {
+                    tabla.style.opacity = '1';
+                    tabla.classList.add('fade-in');
+                }
+            }, 300); // Demora 300ms para que el ojo humano note que procesó
+        }
+
         function recalcularPlan() {
             let tbody = document.getElementById('tablaTareas');
             if(!tbody) return;
@@ -353,6 +419,8 @@
 
             let capHoras = parseFloat(document.getElementById('inputHoras').value) || 8;
             let pctCronos = parseInt(document.getElementById('sliderMezcla').value);
+            
+            // LA REGLA SUPREMA: El Slider manda sobre las horas.
             let maxCronos = capHoras * (pctCronos / 100);
             let maxKP1 = capHoras * ((100 - pctCronos) / 100);
 
@@ -369,12 +437,13 @@
                 let tocaHoy = (movidaPara === fechaSimulada) || (diasPasados >= t.frecuencia);
                 if(ultVez === fechaSimulada || (ultVez && ultVez > fechaSimulada)) tocaHoy = false;
 
+                // Las tareas Críticas solo sirven para ordenarlas arriba, NO saltan la capacidad
                 let esCritica = diasPasados >= (t.frecuencia * 1.30);
-                if(esCritica && (ultVez || diasPasados !== 999)) tocaHoy = true;
-
+                
                 return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica};
             });
 
+            // Agrupamiento
             for(let regla of reglasGrupos) {
                 let keyword = regla.keyword.toUpperCase();
                 let diaRequerido = regla.diaSemana !== "" ? parseInt(regla.diaSemana) : null;
@@ -399,9 +468,10 @@
                 }
             }
 
-            // NUEVO: Filtramos también las tareas que el usuario rotó manualmente hoy
+            // Excluir las rotadas manualmente por el usuario hoy
             let tareasHoy = tareasEvaluadas.filter(t => t.tocaHoy && !tareasOmitidasHoy.includes(t.id));
 
+            // Orden de prioridad (VIP al principio)
             tareasHoy.sort((a, b) => {
                 if(a.esCritica && !b.esCritica) return -1;
                 if(!a.esCritica && b.esCritica) return 1;
@@ -416,21 +486,18 @@
             let hC = 0, hK = 0, hTotal = 0;
             let tolerancia = 0.5;
 
+            // EL FILTRO ESTRICTO DEL SLIDER
             for(let t of tareasHoy) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
-                
-                // VETO DEL SLIDER
-                if (esCronos && pctCronos === 0) continue; 
-                if (!esCronos && pctCronos === 100) continue; 
-
                 let entra = false;
                 
+                // Si el slider dice 0 horas, no entra nada. Ni crítico, ni agrupado.
                 if (esCronos) {
-                    if ((hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
+                    if (maxCronos > 0 && (hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
                         entra = true;
                     }
                 } else {
-                    if ((hK + t.duracion <= maxKP1 + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
+                    if (maxKP1 > 0 && (hK + t.duracion <= maxKP1 + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
                         entra = true;
                     }
                 }
@@ -444,7 +511,7 @@
 
             tbody.innerHTML = '';
             if(planActualVista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-green-600 font-bold bg-green-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Capacidad completa o línea bloqueada por tu Slider.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-green-600 font-bold bg-green-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Capacidad completa, no hay pendientes o bloqueaste la línea con el Slider.</td></tr>';
                 return;
             }
 
@@ -460,7 +527,7 @@
                 
                 let botonesAccion = esHoy ? `
                     <button onclick="marcarCumplida('${t.id}', this)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click">Cumplida</button>
-                    <button onclick="cambiarTarea('${t.id}')" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click" title="Ocultar de hoy y traer otra"><i class="fa-solid fa-rotate mr-1"></i> Rotar</button>
+                    <button onclick="cambiarTarea('${t.id}')" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click" title="Ocultar de hoy y traer otra de la lista"><i class="fa-solid fa-rotate mr-1"></i> Rotar</button>
                     <button onclick="marcarReprogramada('${t.id}', this)" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click">Patear a Mañana</button>
                 ` : `<span class="text-xs text-gray-400 font-bold"><i class="fa-solid fa-lock mr-1"></i> Solo editable en (Hoy)</span>`;
 
@@ -478,10 +545,10 @@
             });
         }
 
-        // NUEVA FUNCIÓN: Agrega la tarea a la lista de "omitidas" y recalcula
+        // Rotar: Oculta la tarea del array temporal y llama a la animación
         function cambiarTarea(id) {
             tareasOmitidasHoy.push(id);
-            recalcularPlan();
+            animarRecalculo();
         }
 
         function copiarParteDiario(btn) {
