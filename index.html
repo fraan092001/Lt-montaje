@@ -477,10 +477,11 @@
 
                 let esCritica = diasPasados >= (t.frecuencia * 1.30);
                 
-                // NUEVO: Auto-detectar cualquier tarea de AGV como Producción temporalmente
-                let esAGV = (t.maquina + " " + t.actividad).toUpperCase().includes("AGV");
+                // CONDICIÓN ESPECÍFICA: Solo los AGV de la línea KP1 son Producción
+                let desc = (t.maquina + " " + t.actividad).toUpperCase();
+                let esAGVKP1 = desc.includes("AGV") && t.linea.toUpperCase().includes("KP1");
                 
-                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica, esProd: esAGV};
+                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica, esProd: esAGVKP1};
             });
 
             for(let regla of reglasGrupos) {
@@ -533,7 +534,7 @@
                 if (esCronos && pctCronos === 0) continue; 
                 if (!esCronos && pctCronos === 100) continue; 
                 
-                // Si la tarea es de Producción (como los AGV), entra sin restar capacidad de las 8hs
+                // Si la tarea es de Producción, entra sin restar capacidad de las 8hs
                 if(t.esProd) {
                     planActualVista.push(t);
                     continue; 
