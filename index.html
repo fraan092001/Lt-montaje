@@ -41,7 +41,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100 items-end">
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 uppercase">Capacidad (Hs)</label>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Capacidad Restante (Hs)</label>
                     <input type="number" id="inputHoras" value="8" class="mt-1 block w-full rounded border-gray-300 p-2 text-sm shadow-sm" onchange="animarRecalculo()">
                 </div>
                 <div class="col-span-1">
@@ -101,6 +101,49 @@
 
         <!-- PESTAÑA 3 -->
         <div id="view-config" class="hidden p-6 space-y-6">
+            
+            <!-- NUEVO: CARGA MANUAL -->
+            <div class="bg-white border rounded-lg shadow-sm p-6 border-l-4 border-l-indigo-500">
+                <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-clock-rotate-left mr-2 text-indigo-600"></i> Carga Manual (Fuera de Plan)</h3>
+                <p class="text-xs text-gray-500 mb-4">Si los técnicos hicieron tareas que no estaban programadas o querés cargar trabajo de ayer, registralo acá.</p>
+                <div class="flex space-x-2">
+                    <select id="selectManual" class="border rounded p-2 text-sm w-full shadow-sm bg-white">
+                        <option value="">Cargando tareas...</option>
+                    </select>
+                    <input type="date" id="fechaManual" class="border rounded p-2 text-sm w-48 shadow-sm">
+                    <button onclick="guardarRegistroManual()" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-indigo-700 shadow-sm btn-click whitespace-nowrap">Registrar Tarea</button>
+                </div>
+                <p id="msgManual" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Guardado correctamente en el historial!</p>
+            </div>
+
+            <div class="bg-white border rounded-lg shadow-sm p-6">
+                <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-layer-group mr-2 text-blue-600"></i> Reglas de Agrupamiento y Anclaje</h3>
+                <p class="text-xs text-gray-500 mb-4">Definí palabras clave (ej: "AGV CH VACIADO"). Si no asignás día, se forzará su programación conjunta.</p>
+                
+                <div class="flex space-x-2">
+                    <input type="text" id="nuevoGrupo" placeholder="Palabra clave..." class="border rounded p-2 text-sm w-48 shadow-sm">
+                    <select id="diaGrupo" class="border rounded p-2 text-sm w-56 shadow-sm bg-white">
+                        <option value="">Sin asignación (Agrupar cualquier día)</option>
+                        <option value="1">Forzar los Lunes</option>
+                        <option value="2">Forzar los Martes</option>
+                        <option value="3">Forzar los Miércoles</option>
+                        <option value="4">Forzar los Jueves</option>
+                        <option value="5">Forzar los Viernes</option>
+                    </select>
+                    <button onclick="agregarGrupo()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-900 shadow-sm btn-click font-bold">Guardar Regla</button>
+                </div>
+                
+                <!-- NUEVO: CHECKBOX DE PRODUCCIÓN -->
+                <div class="flex items-center mt-3 bg-gray-50 p-2 rounded border w-fit">
+                    <input type="checkbox" id="checkProduccion" class="mr-2 h-4 w-4 text-blue-600 rounded border-gray-300">
+                    <label for="checkProduccion" class="text-xs text-gray-700 font-medium cursor-pointer">
+                        Esta tarea se hace durante la <span class="font-bold text-emerald-600">Producción</span> (No consume horas del turno)
+                    </label>
+                </div>
+
+                <ul id="listaGrupos" class="mt-4 text-sm text-gray-600 space-y-2"></ul>
+            </div>
+
             <div class="bg-white border rounded-lg shadow-sm p-6">
                 <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-database mr-2 text-blue-600"></i> Estado de la Base Maestra</h3>
                 <div id="infoBase" class="text-sm font-medium text-gray-600 bg-gray-50 p-4 rounded border mb-4">
@@ -113,24 +156,6 @@
                     <input type="file" id="fileImport" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer transition"/>
                     <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada en la nube exitosamente!</p>
                 </div>
-            </div>
-            
-            <div class="bg-white border rounded-lg shadow-sm p-6">
-                <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-layer-group mr-2 text-blue-600"></i> Reglas de Agrupamiento y Anclaje</h3>
-                <p class="text-xs text-gray-500 mb-4">Definí palabras clave (ej: "AGV TR"). Si no asignás día, se forzará su programación conjunta.</p>
-                <div class="flex space-x-2">
-                    <input type="text" id="nuevoGrupo" placeholder="Palabra clave..." class="border rounded p-2 text-sm w-48 shadow-sm">
-                    <select id="diaGrupo" class="border rounded p-2 text-sm w-56 shadow-sm bg-white">
-                        <option value="">Sin asignación (Agrupar cualquier día)</option>
-                        <option value="1">Forzar los Lunes</option>
-                        <option value="2">Forzar los Martes</option>
-                        <option value="3">Forzar los Miércoles</option>
-                        <option value="4">Forzar los Jueves</option>
-                        <option value="5">Forzar los Viernes</option>
-                    </select>
-                    <button onclick="agregarGrupo()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-900 shadow-sm btn-click">Guardar Regla</button>
-                </div>
-                <ul id="listaGrupos" class="mt-4 text-sm text-gray-600 space-y-2"></ul>
             </div>
         </div>
     </div>
@@ -157,7 +182,6 @@
         let fechaSimulada = getFechaHoy(); 
         let planActualVista = []; 
         let currentTab = 'dashboard';
-        
         let tareasOmitidasHoy = [];
 
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -188,6 +212,17 @@
                 if(baseTareas.length > 0) {
                     infoBase.innerHTML = `<span class="text-green-600 font-bold"><i class="fa-solid fa-check-circle mr-1"></i> Base Activa:</span> ${baseTareas.length} tareas cargadas en la nube. Operando normalmente.`;
                     infoBase.className = "text-sm font-medium text-gray-700 bg-green-50 p-4 rounded border border-green-200 mb-4";
+                    
+                    // Llenar el select de Carga Manual
+                    let selectManual = document.getElementById('selectManual');
+                    if (selectManual) {
+                        let options = '<option value="">Seleccionar tarea para registrar...</option>';
+                        let baseOrdenada = [...baseTareas].sort((a,b) => a.maquina.localeCompare(b.maquina));
+                        baseOrdenada.forEach(t => {
+                            options += `<option value="${t.id}">${t.linea} | ${t.maquina} - ${t.actividad}</option>`;
+                        });
+                        selectManual.innerHTML = options;
+                    }
                 } else {
                     infoBase.innerHTML = `<span class="text-amber-600 font-bold"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Base Vacía:</span> Por favor, subí tu archivo Excel por única vez abajo.`;
                     infoBase.className = "text-sm font-medium text-gray-700 bg-amber-50 p-4 rounded border border-amber-200 mb-4";
@@ -215,7 +250,33 @@
                 tareasOmitidasHoy = []; 
                 renderizarBotonesDias();
             }
-            if(tab === 'config') renderizarGrupos();
+            if(tab === 'config') {
+                renderizarGrupos();
+                // Por defecto, pone la fecha de "Ayer" en el registro manual
+                let tzoffset = (new Date()).getTimezoneOffset() * 60000;
+                let ayerObj = new Date(Date.now() - tzoffset - 86400000); 
+                if(document.getElementById('fechaManual')) {
+                    document.getElementById('fechaManual').value = ayerObj.toISOString().split('T')[0];
+                }
+            }
+        }
+
+        // GUARDAR CARGA MANUAL (Retroactiva)
+        function guardarRegistroManual() {
+            let id = document.getElementById('selectManual').value;
+            let fecha = document.getElementById('fechaManual').value;
+            if (!id || !fecha) {
+                alert("Por favor, seleccioná una tarea y una fecha válida.");
+                return;
+            }
+            
+            db.ref('lt_data/historialLT/' + id).set(fecha).then(() => {
+                db.ref('lt_data/reprogramadasLT/' + id).remove(); // Por si estaba pateada
+                let msg = document.getElementById('msgManual');
+                msg.classList.remove('hidden');
+                document.getElementById('selectManual').value = ""; // Limpiar
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+            });
         }
 
         function actualizarLabelMezcla() {
@@ -262,7 +323,6 @@
             renderizarBotonesDias();
         }
 
-        // LECTOR DE EXCEL INTELIGENTE (AUTO-MAPEO DE COLUMNAS)
         let fileInput = document.getElementById('fileImport');
         if(fileInput) {
             fileInput.addEventListener('change', function(e) {
@@ -274,24 +334,18 @@
                     let sheet = wb.Sheets[wb.SheetNames[0]];
                     let json = XLSX.utils.sheet_to_json(sheet, {header: 1});
                     
-                    if(json.length < 2) {
-                        alert("El Excel parece estar vacío.");
-                        return;
-                    }
+                    if(json.length < 2) { alert("El Excel parece estar vacío."); return; }
 
-                    // 1. Encontrar la fila de los títulos (headers)
                     let headerRow = 0;
                     for(let r = 0; r < 5; r++) { 
                         if(json[r] && json[r].length > 2) {
                             let rowStr = json[r].join(" ").toLowerCase();
                             if(rowStr.includes("linea") || rowStr.includes("línea") || rowStr.includes("maquina") || rowStr.includes("máquina")) {
-                                headerRow = r;
-                                break;
+                                headerRow = r; break;
                             }
                         }
                     }
 
-                    // 2. Mapear en qué número de columna está cada cosa
                     let headers = json[headerRow].map(h => String(h || "").toLowerCase().trim());
                     let cLin = headers.findIndex(h => h.includes('linea') || h.includes('línea'));
                     let cMaq = headers.findIndex(h => h.includes('maquina') || h.includes('máquina'));
@@ -300,18 +354,12 @@
                     let cFre = headers.findIndex(h => h.includes('frec') || h.includes('dias') || h.includes('días'));
                     let cFec = headers.findIndex(h => h.includes('fecha') || h.includes('ultimo') || h.includes('último') || h.includes('última'));
                     
-                    // Fallbacks por si el título es raro
-                    if(cLin === -1) cLin = 0;
-                    if(cMaq === -1) cMaq = 1;
-                    if(cAct === -1) cAct = 2;
-                    if(cDur === -1) cDur = 3;
-                    if(cFre === -1) cFre = 4;
-                    if(cFec === -1) cFec = 5;
+                    if(cLin === -1) cLin = 0; if(cMaq === -1) cMaq = 1; if(cAct === -1) cAct = 2;
+                    if(cDur === -1) cDur = 3; if(cFre === -1) cFre = 4; if(cFec === -1) cFec = 5;
 
                     let nuevasTareas = [];
                     let nuevoHistorial = { ...historialLT };
 
-                    // 3. Extraer los datos reales saltando los títulos
                     for(let i = headerRow + 1; i < json.length; i++) { 
                         if(!json[i] || json[i].length === 0) continue; 
                         
@@ -333,7 +381,6 @@
                             frecuencia: parseInt(json[i][cFre]) || 7 
                         });
 
-                        // Procesar Fechas
                         let fechaExcel = json[i][cFec];
                         if (fechaExcel) {
                             let fechaFormateada = "";
@@ -351,7 +398,6 @@
                                     fechaFormateada = `${y}-${m}-${d}`;
                                 } else if (typeof fechaExcel === 'string') {
                                     let txt = fechaExcel.trim();
-                                    // Ignorar si dice "Pendiente" o no tiene formato de fecha
                                     if (txt.toLowerCase() === 'pendiente' || txt.toLowerCase() === 'realizado') continue;
                                     
                                     if (txt.includes('/')) {
@@ -386,12 +432,10 @@
             });
         }
 
-        // ANIMACIÓN VISUAL PARA EL BOTÓN
         function animarRecalculo() {
             let btn = document.getElementById('btnRecalcular');
             let tabla = document.getElementById('tablaTareas');
             
-            // Efecto de carga
             if(btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando...';
             if(tabla) {
                 tabla.classList.remove('fade-in');
@@ -405,7 +449,7 @@
                     tabla.style.opacity = '1';
                     tabla.classList.add('fade-in');
                 }
-            }, 300); // Demora 300ms para que el ojo humano note que procesó
+            }, 300); 
         }
 
         function recalcularPlan() {
@@ -420,7 +464,6 @@
             let capHoras = parseFloat(document.getElementById('inputHoras').value) || 8;
             let pctCronos = parseInt(document.getElementById('sliderMezcla').value);
             
-            // LA REGLA SUPREMA: El Slider manda sobre las horas.
             let maxCronos = capHoras * (pctCronos / 100);
             let maxKP1 = capHoras * ((100 - pctCronos) / 100);
 
@@ -437,13 +480,12 @@
                 let tocaHoy = (movidaPara === fechaSimulada) || (diasPasados >= t.frecuencia);
                 if(ultVez === fechaSimulada || (ultVez && ultVez > fechaSimulada)) tocaHoy = false;
 
-                // Las tareas Críticas solo sirven para ordenarlas arriba, NO saltan la capacidad
                 let esCritica = diasPasados >= (t.frecuencia * 1.30);
                 
-                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica};
+                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica, esProd: false};
             });
 
-            // Agrupamiento
+            // Agrupamiento y reglas de Producción
             for(let regla of reglasGrupos) {
                 let keyword = regla.keyword.toUpperCase();
                 let diaRequerido = regla.diaSemana !== "" ? parseInt(regla.diaSemana) : null;
@@ -460,6 +502,7 @@
                             if(historialLT[t.id] !== fechaSimulada) { 
                                 t.tocaHoy = true; 
                                 t.esFijadaHoy = true; 
+                                if(regla.esProd) t.esProd = true; // Aplica el flag si la regla es de Produccion
                             }
                         });
                     }
@@ -468,11 +511,11 @@
                 }
             }
 
-            // Excluir las rotadas manualmente por el usuario hoy
             let tareasHoy = tareasEvaluadas.filter(t => t.tocaHoy && !tareasOmitidasHoy.includes(t.id));
 
-            // Orden de prioridad (VIP al principio)
             tareasHoy.sort((a, b) => {
+                if(a.esProd && !b.esProd) return -1; // Producción siempre se muestra arriba
+                if(!a.esProd && b.esProd) return 1;
                 if(a.esCritica && !b.esCritica) return -1;
                 if(!a.esCritica && b.esCritica) return 1;
                 if(a.esFijadaHoy && !b.esFijadaHoy) return -1;
@@ -486,12 +529,17 @@
             let hC = 0, hK = 0, hTotal = 0;
             let tolerancia = 0.5;
 
-            // EL FILTRO ESTRICTO DEL SLIDER
             for(let t of tareasHoy) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
+                
+                // Si la tarea es de Producción, ENTRA SIEMPRE y NO resta capacidad
+                if(t.esProd) {
+                    planActualVista.push(t);
+                    continue; 
+                }
+
                 let entra = false;
                 
-                // Si el slider dice 0 horas, no entra nada. Ni crítico, ni agrupado.
                 if (esCronos) {
                     if (maxCronos > 0 && (hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
                         entra = true;
@@ -511,7 +559,7 @@
 
             tbody.innerHTML = '';
             if(planActualVista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-green-600 font-bold bg-green-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Capacidad completa, no hay pendientes o bloqueaste la línea con el Slider.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold bg-gray-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Capacidad completa o línea bloqueada.</td></tr>';
                 return;
             }
 
@@ -521,10 +569,13 @@
                 let badgeColor = t.linea.toUpperCase().includes('KP1') ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800';
                 let reproTag = '';
                 
-                if (t.esCritica && (t.diasPasados !== 999)) reproTag = `<span class="ml-2 text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded uppercase font-bold animate-pulse"><i class="fa-solid fa-triangle-exclamation"></i> Crítica</span>`;
+                if (t.esProd) reproTag = `<span class="ml-2 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded uppercase font-bold"><i class="fa-solid fa-bolt mr-1"></i> Producción</span>`;
+                else if (t.esCritica && (t.diasPasados !== 999)) reproTag = `<span class="ml-2 text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded uppercase font-bold animate-pulse"><i class="fa-solid fa-triangle-exclamation"></i> Crítica</span>`;
                 else if (t.esFijadaHoy) reproTag = `<span class="ml-2 text-[10px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded uppercase font-bold">Agrupada</span>`;
                 else if (t.esRepro) reproTag = `<span class="ml-2 text-[10px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded uppercase font-bold">Reprogramada</span>`;
                 
+                let duracionVisual = t.esProd ? `<span class="text-emerald-600 font-bold"><i class="fa-solid fa-bolt mr-1"></i>0 hs</span>` : `${t.duracion} hs`;
+
                 let botonesAccion = esHoy ? `
                     <button onclick="marcarCumplida('${t.id}', this)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click">Cumplida</button>
                     <button onclick="cambiarTarea('${t.id}')" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click" title="Ocultar de hoy y traer otra de la lista"><i class="fa-solid fa-rotate mr-1"></i> Rotar</button>
@@ -538,14 +589,13 @@
                             <span class="text-xs text-gray-500 font-normal">${t.actividad}</span>
                         </td>
                         <td class="p-3"><span class="px-2 py-1 rounded text-xs font-bold ${badgeColor}">${t.linea}</span></td>
-                        <td class="p-3 text-gray-600 font-medium">${t.duracion} hs</td>
+                        <td class="p-3 text-gray-600 font-medium">${duracionVisual}</td>
                         <td class="p-3 text-right space-x-2">${botonesAccion}</td>
                     </tr>
                 `;
             });
         }
 
-        // Rotar: Oculta la tarea del array temporal y llama a la animación
         function cambiarTarea(id) {
             tareasOmitidasHoy.push(id);
             animarRecalculo();
@@ -659,10 +709,13 @@
         function agregarGrupo() {
             let txt = document.getElementById('nuevoGrupo').value.trim();
             let dia = document.getElementById('diaGrupo').value;
+            let esProd = document.getElementById('checkProduccion').checked;
+            
             if(txt) {
-                let nuevasReglas = [...reglasGrupos, { keyword: txt, diaSemana: dia }];
+                let nuevasReglas = [...reglasGrupos, { keyword: txt, diaSemana: dia, esProd: esProd }];
                 db.ref('lt_data/reglasGrupos').set(nuevasReglas);
                 document.getElementById('nuevoGrupo').value = '';
+                document.getElementById('checkProduccion').checked = false;
             }
         }
 
@@ -677,8 +730,10 @@
             if(!lista) return;
             lista.innerHTML = reglasGrupos.map((g, i) => {
                 let infoDia = g.diaSemana ? `<span class="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded font-bold ml-2">Forzado: ${diasMapa[g.diaSemana]}</span>` : `<span class="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded ml-2">Agrupado (Sin día fijo)</span>`;
+                let infoProd = g.esProd ? `<span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded font-bold ml-2"><i class="fa-solid fa-bolt mr-1"></i> Producción</span>` : ``;
+                
                 return `<li class="flex items-center p-2 bg-gray-50 border rounded w-fit mb-2">
-                    <span class="font-medium text-gray-700">Regla: "${g.keyword}"</span> ${infoDia} 
+                    <span class="font-medium text-gray-700">Regla: "${g.keyword}"</span> ${infoDia} ${infoProd}
                     <button onclick="eliminarGrupo(${i})" class="text-red-500 font-bold ml-3 text-sm btn-click"><i class="fa-solid fa-trash"></i></button>
                 </li>`;
             }).join('');
