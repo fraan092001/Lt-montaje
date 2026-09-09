@@ -102,7 +102,6 @@
         <!-- PESTAÑA 3 -->
         <div id="view-config" class="hidden p-6 space-y-6">
             
-            <!-- NUEVO: CARGA MANUAL -->
             <div class="bg-white border rounded-lg shadow-sm p-6 border-l-4 border-l-indigo-500">
                 <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-clock-rotate-left mr-2 text-indigo-600"></i> Carga Manual (Fuera de Plan)</h3>
                 <p class="text-xs text-gray-500 mb-4">Si los técnicos hicieron tareas que no estaban programadas o querés cargar trabajo de ayer, registralo acá.</p>
@@ -118,7 +117,7 @@
 
             <div class="bg-white border rounded-lg shadow-sm p-6">
                 <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-layer-group mr-2 text-blue-600"></i> Reglas de Agrupamiento y Anclaje</h3>
-                <p class="text-xs text-gray-500 mb-4">Definí palabras clave (ej: "AGV CH VACIADO"). Si no asignás día, se forzará su programación conjunta.</p>
+                <p class="text-xs text-gray-500 mb-4">Definí palabras clave (ej: "MESA ARMO"). Si no asignás día, se forzará su programación conjunta.</p>
                 
                 <div class="flex space-x-2">
                     <input type="text" id="nuevoGrupo" placeholder="Palabra clave..." class="border rounded p-2 text-sm w-48 shadow-sm">
@@ -133,7 +132,6 @@
                     <button onclick="agregarGrupo()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-900 shadow-sm btn-click font-bold">Guardar Regla</button>
                 </div>
                 
-                <!-- NUEVO: CHECKBOX DE PRODUCCIÓN -->
                 <div class="flex items-center mt-3 bg-gray-50 p-2 rounded border w-fit">
                     <input type="checkbox" id="checkProduccion" class="mr-2 h-4 w-4 text-blue-600 rounded border-gray-300">
                     <label for="checkProduccion" class="text-xs text-gray-700 font-medium cursor-pointer">
@@ -213,7 +211,6 @@
                     infoBase.innerHTML = `<span class="text-green-600 font-bold"><i class="fa-solid fa-check-circle mr-1"></i> Base Activa:</span> ${baseTareas.length} tareas cargadas en la nube. Operando normalmente.`;
                     infoBase.className = "text-sm font-medium text-gray-700 bg-green-50 p-4 rounded border border-green-200 mb-4";
                     
-                    // Llenar el select de Carga Manual
                     let selectManual = document.getElementById('selectManual');
                     if (selectManual) {
                         let options = '<option value="">Seleccionar tarea para registrar...</option>';
@@ -252,7 +249,6 @@
             }
             if(tab === 'config') {
                 renderizarGrupos();
-                // Por defecto, pone la fecha de "Ayer" en el registro manual
                 let tzoffset = (new Date()).getTimezoneOffset() * 60000;
                 let ayerObj = new Date(Date.now() - tzoffset - 86400000); 
                 if(document.getElementById('fechaManual')) {
@@ -261,7 +257,6 @@
             }
         }
 
-        // GUARDAR CARGA MANUAL (Retroactiva)
         function guardarRegistroManual() {
             let id = document.getElementById('selectManual').value;
             let fecha = document.getElementById('fechaManual').value;
@@ -271,10 +266,10 @@
             }
             
             db.ref('lt_data/historialLT/' + id).set(fecha).then(() => {
-                db.ref('lt_data/reprogramadasLT/' + id).remove(); // Por si estaba pateada
+                db.ref('lt_data/reprogramadasLT/' + id).remove(); 
                 let msg = document.getElementById('msgManual');
                 msg.classList.remove('hidden');
-                document.getElementById('selectManual').value = ""; // Limpiar
+                document.getElementById('selectManual').value = ""; 
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             });
         }
@@ -482,10 +477,12 @@
 
                 let esCritica = diasPasados >= (t.frecuencia * 1.30);
                 
-                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica, esProd: false};
+                // NUEVO: Auto-detectar cualquier tarea de AGV como Producción temporalmente
+                let esAGV = (t.maquina + " " + t.actividad).toUpperCase().includes("AGV");
+                
+                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica, esProd: esAGV};
             });
 
-            // Agrupamiento y reglas de Producción
             for(let regla of reglasGrupos) {
                 let keyword = regla.keyword.toUpperCase();
                 let diaRequerido = regla.diaSemana !== "" ? parseInt(regla.diaSemana) : null;
@@ -502,7 +499,7 @@
                             if(historialLT[t.id] !== fechaSimulada) { 
                                 t.tocaHoy = true; 
                                 t.esFijadaHoy = true; 
-                                if(regla.esProd) t.esProd = true; // Aplica el flag si la regla es de Produccion
+                                if(regla.esProd) t.esProd = true;
                             }
                         });
                     }
@@ -514,7 +511,7 @@
             let tareasHoy = tareasEvaluadas.filter(t => t.tocaHoy && !tareasOmitidasHoy.includes(t.id));
 
             tareasHoy.sort((a, b) => {
-                if(a.esProd && !b.esProd) return -1; // Producción siempre se muestra arriba
+                if(a.esProd && !b.esProd) return -1;
                 if(!a.esProd && b.esProd) return 1;
                 if(a.esCritica && !b.esCritica) return -1;
                 if(!a.esCritica && b.esCritica) return 1;
@@ -532,7 +529,11 @@
             for(let t of tareasHoy) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
                 
-                // Si la tarea es de Producción, ENTRA SIEMPRE y NO resta capacidad
+                // EL VETO DEL SLIDER MANDA SOBRE TODO (Incluso Producción)
+                if (esCronos && pctCronos === 0) continue; 
+                if (!esCronos && pctCronos === 100) continue; 
+                
+                // Si la tarea es de Producción (como los AGV), entra sin restar capacidad de las 8hs
                 if(t.esProd) {
                     planActualVista.push(t);
                     continue; 
