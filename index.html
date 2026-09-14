@@ -509,7 +509,8 @@
                 let desc = (t.maquina + " " + t.actividad).toUpperCase();
                 let esAGVKP1 = desc.includes("AGV") && t.linea.toUpperCase().includes("KP1");
                 
-                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica, esProd: esAGVKP1, esAdelanto: false};
+                // Agregamos la propiedad grupoId vacía por defecto
+                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica, esProd: esAGVKP1, esAdelanto: false, grupoId: null};
             });
 
             for(let regla of reglasGrupos) {
@@ -528,6 +529,7 @@
                             if(historialLT[t.id] !== fechaSimulada) { 
                                 t.tocaHoy = true; 
                                 t.esFijadaHoy = true; 
+                                t.grupoId = keyword; // SELLAMOS EL GRUPO
                                 if(regla.esProd) t.esProd = true;
                             }
                         });
@@ -564,10 +566,15 @@
             planActualVista = [];
             let hC = 0, hK = 0, hTotal = 0;
             let tolerancia = 1.0; 
+            
+            // LÓGICA DE BLOQUE INDIVISIBLE
+            let gruposAceptados = new Set();
+            let gruposRechazados = new Set();
 
             for(let t of tareasDisponibles) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
                 
+                // VETO DEL SLIDER (Fuerza bruta del usuario)
                 if (esCronos && pctCronos === 0) continue; 
                 if (!esCronos && pctCronos === 100) continue; 
                 
@@ -578,14 +585,33 @@
 
                 let entra = false;
                 
-                // LÓGICA DE BLOQUE INDIVISIBLE PARA GRUPOS
                 if (t.esFijadaHoy) {
-                    // Si pertenece a un grupo, ignora el límite del porcentaje para no partir al grupo a la mitad,
-                    // siempre y cuando quede capacidad total en las 8hs.
-                    if (hTotal + t.duracion <= capHoras + tolerancia) {
-                        entra = true;
+                    // Si ya decidimos que este grupo no entraba, salteamos la tarea
+                    if (gruposRechazados.has(t.grupoId)) continue;
+                    
+                    // Si es la primera vez que vemos una tarea de este grupo, evaluamos el grupo entero
+                    if (!gruposAceptados.has(t.grupoId)) {
+                        let tareasDelMismoGrupo = tareasDisponibles.filter(x => x.grupoId === t.grupoId && !x.esProd);
+                        
+                        let duracionGrupo = 0;
+                        for (let x of tareasDelMismoGrupo) {
+                            let xCronos = x.linea.toUpperCase().includes('CRONOS');
+                            if (xCronos && pctCronos === 0) continue;
+                            if (!xCronos && pctCronos === 100) continue;
+                            duracionGrupo += x.duracion;
+                        }
+
+                        // Si todo el grupo sumado entra en las horas restantes (o si el tablero está vacío para no trabar)
+                        if (hTotal + duracionGrupo <= capHoras + tolerancia || hTotal === 0) {
+                            gruposAceptados.add(t.grupoId);
+                        } else {
+                            gruposRechazados.add(t.grupoId);
+                            continue; // No entra el grupo, pasamos a la siguiente tarea
+                        }
                     }
+                    entra = true; // Si llegamos acá, el grupo fue aceptado
                 } else {
+                    // Tareas normales (Individuales)
                     if (esCronos) {
                         if (maxCronos > 0 && (hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
                             entra = true;
@@ -607,7 +633,7 @@
 
             tbody.innerHTML = '';
             if(planActualVista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold bg-gray-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Toda la planta está al día.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold bg-gray-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Toda la planta está al día o bloqueaste la línea con el slider.</td></tr>';
                 return;
             }
 
