@@ -150,9 +150,9 @@
                 
                 <div class="border-t pt-4">
                     <h4 class="font-bold text-gray-700 text-sm mb-1">Actualizar Base (Matriz Calendario)</h4>
-                    <p class="text-xs text-gray-500 mb-4">El sistema ahora escanea todas las columnas horizontales buscando "Realizado" debajo de cada fecha.</p>
+                    <p class="text-xs text-gray-500 mb-4">El sistema ahora escanea todas las columnas buscando "Realizado" debajo de cada fecha de tu matriz.</p>
                     <input type="file" id="fileImport" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer transition"/>
-                    <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada leyendo la matriz!</p>
+                    <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada leyendo la matriz a prueba de errores!</p>
                 </div>
             </div>
         </div>
@@ -318,7 +318,7 @@
             renderizarBotonesDias();
         }
 
-        // ---------- NUEVO LECTOR DE EXCEL (MATRIZ / CALENDARIO) ----------
+        // ---------- LECTOR DE EXCEL MATRIZ (BLINDADO) ----------
         let fileInput = document.getElementById('fileImport');
         if(fileInput) {
             fileInput.addEventListener('change', function(e) {
@@ -332,17 +332,13 @@
                     
                     if(json.length < 2) { alert("El Excel parece estar vacío."); return; }
 
-                    // 1. Detectar la fila de títulos (donde dice LINEA, ZONAS, ACTIVIDAD...)
                     let headerRow = -1;
                     for(let r = 0; r < 10; r++) { 
                         if(json[r] && json[r].join("").toLowerCase().includes("linea")) {
                             headerRow = r; break;
                         }
                     }
-                    if(headerRow === -1) headerRow = 1; // Fallback
-
-                    // 2. La fila de fechas siempre es la que está justo arriba de los títulos
-                    let dateRow = headerRow > 0 ? headerRow - 1 : 0; 
+                    if(headerRow === -1) headerRow = 1;
 
                     let headers = json[headerRow].map(h => String(h || "").toLowerCase().trim());
                     let cLin = headers.findIndex(h => h.includes('linea') || h.includes('línea'));
@@ -357,7 +353,6 @@
                     let nuevasTareas = [];
                     let nuevoHistorial = { ...historialLT };
 
-                    // Función interna para parsear la fecha de la fila 1 (dateRow)
                     function parseExcelDate(excelDate) {
                         if (!excelDate) return null;
                         if (excelDate instanceof Date) {
@@ -388,7 +383,6 @@
                         return null;
                     }
 
-                    // 3. Empezar a leer las máquinas (fila por fila, debajo de los títulos)
                     for(let i = headerRow + 1; i < json.length; i++) { 
                         if(!json[i] || json[i].length === 0) continue; 
                         
@@ -410,32 +404,28 @@
                             frecuencia: parseInt(json[i][cFre]) || 7 
                         });
 
-                        // 4. EL BUSCADOR HORIZONTAL EN LA MATRIZ
-                        // Vamos recorriendo las columnas de esa máquina desde el final (derecha a izquierda)
+                        // Busca la última fecha marcada hacia la derecha asegurando no perderse por celdas vacías
                         let ultimaFechaValida = null;
+                        let maxCols = Math.max(json[i].length, (json[0] || []).length, (json[1] || []).length);
                         
-                        for (let col = json[i].length - 1; col > cFre; col--) {
+                        for (let col = maxCols - 1; col > cFre; col--) {
                             let celdaEstado = String(json[i][col] || "").trim().toLowerCase();
                             
-                            // Si en esa celda de la grilla dice Realizado (o pintada con OK, etc.)
                             if (celdaEstado === 'realizado' || celdaEstado === 'ok' || celdaEstado === 'hecho' || celdaEstado === 'x') {
-                                
-                                // Miramos hacia arriba (a la fila dateRow) en la misma columna para ver qué fecha era
-                                let rawDate = json[dateRow][col];
+                                // Rastrea la fecha en las primeras 3 filas de la misma columna
+                                let rawDate = (json[0] && json[0][col]) || (json[1] && json[1][col]) || (json[2] && json[2][col]);
                                 ultimaFechaValida = parseExcelDate(rawDate);
                                 
                                 if (ultimaFechaValida) {
-                                    break; // Como vamos de derecha a izquierda, encontramos la más reciente. Cortamos.
+                                    break; 
                                 }
                             }
                         }
 
-                        // 5. Si encontramos la fecha, la grabamos.
                         if (ultimaFechaValida) {
                             nuevoHistorial[idFijo] = ultimaFechaValida;
-                            delete reprogramadasLT[idFijo]; // Limpia repateos viejos
+                            delete reprogramadasLT[idFijo];
                         } else {
-                            // Si recorrimos toda la fila y no dice Realizado en ningún lado, significa que nunca se hizo.
                             delete nuevoHistorial[idFijo];
                             delete reprogramadasLT[idFijo];
                         }
