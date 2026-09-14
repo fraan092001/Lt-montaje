@@ -150,7 +150,7 @@
                 
                 <div class="border-t pt-4">
                     <h4 class="font-bold text-gray-700 text-sm mb-1">Actualizar Base (Matriz Calendario)</h4>
-                    <p class="text-xs text-gray-500 mb-4">El sistema ahora escanea todas las columnas buscando "Realizado" debajo de cada fecha de tu matriz.</p>
+                    <p class="text-xs text-gray-500 mb-4">El sistema escanea todas las columnas buscando "Realizado" debajo de cada fecha de tu matriz, sorteando celdas combinadas.</p>
                     <input type="file" id="fileImport" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer transition"/>
                     <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada leyendo la matriz a prueba de errores!</p>
                 </div>
@@ -318,7 +318,7 @@
             renderizarBotonesDias();
         }
 
-        // ---------- LECTOR DE EXCEL MATRIZ (BLINDADO) ----------
+        // LECTOR DE EXCEL MATRIZ (MODO RASTREADOR)
         let fileInput = document.getElementById('fileImport');
         if(fileInput) {
             fileInput.addEventListener('change', function(e) {
@@ -364,9 +364,9 @@
                         if (typeof excelDate === 'number') {
                             let jsDate = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
                             jsDate.setMinutes(jsDate.getMinutes() + jsDate.getTimezoneOffset());
-                            let y = jsDate.getFullYear();
-                            let m = String(jsDate.getMonth() + 1).padStart(2, '0');
-                            let d = String(jsDate.getDate()).padStart(2, '0');
+                            let y = jsDate.getUTCFullYear();
+                            let m = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
+                            let d = String(jsDate.getUTCDate()).padStart(2, '0');
                             return `${y}-${m}-${d}`;
                         }
                         if (typeof excelDate === 'string') {
@@ -381,6 +381,12 @@
                             }
                         }
                         return null;
+                    }
+
+                    // Calculamos el ancho máximo de columnas para no perder nada
+                    let maxCols = 0;
+                    for(let r=0; r<=Math.min(headerRow+2, json.length-1); r++) { 
+                        if(json[r]) maxCols = Math.max(maxCols, json[r].length); 
                     }
 
                     for(let i = headerRow + 1; i < json.length; i++) { 
@@ -404,21 +410,29 @@
                             frecuencia: parseInt(json[i][cFre]) || 7 
                         });
 
-                        // Busca la última fecha marcada hacia la derecha asegurando no perderse por celdas vacías
                         let ultimaFechaValida = null;
-                        let maxCols = Math.max(json[i].length, (json[0] || []).length, (json[1] || []).length);
+                        let rowMaxCols = Math.max(maxCols, json[i].length);
                         
-                        for (let col = maxCols - 1; col > cFre; col--) {
+                        for (let col = rowMaxCols - 1; col > cFre; col--) {
                             let celdaEstado = String(json[i][col] || "").trim().toLowerCase();
                             
                             if (celdaEstado === 'realizado' || celdaEstado === 'ok' || celdaEstado === 'hecho' || celdaEstado === 'x') {
-                                // Rastrea la fecha en las primeras 3 filas de la misma columna
-                                let rawDate = (json[0] && json[0][col]) || (json[1] && json[1][col]) || (json[2] && json[2][col]);
-                                ultimaFechaValida = parseExcelDate(rawDate);
                                 
-                                if (ultimaFechaValida) {
-                                    break; 
+                                // RASTREADOR: Escanea hacia arriba y hacia la izquierda (sorteando celdas combinadas)
+                                for (let c = col; c >= cFre; c--) { 
+                                    for (let r = headerRow; r >= 0; r--) { 
+                                        if (json[r] && json[r][c]) {
+                                            let parsed = parseExcelDate(json[r][c]);
+                                            if (parsed) {
+                                                ultimaFechaValida = parsed;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if (ultimaFechaValida) break;
                                 }
+                                
+                                if (ultimaFechaValida) break; 
                             }
                         }
 
