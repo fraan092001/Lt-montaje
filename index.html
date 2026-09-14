@@ -149,10 +149,10 @@
                 </div>
                 
                 <div class="border-t pt-4">
-                    <h4 class="font-bold text-gray-700 text-sm mb-1">Actualizar Base (Excel)</h4>
-                    <p class="text-xs text-gray-500 mb-4">La App ahora lee tu columna Fecha y calcula automáticamente el próximo vencimiento según la Frecuencia.</p>
+                    <h4 class="font-bold text-gray-700 text-sm mb-1">Actualizar Base (Matriz Calendario)</h4>
+                    <p class="text-xs text-gray-500 mb-4">El sistema ahora escanea todas las columnas horizontales buscando "Realizado" debajo de cada fecha.</p>
                     <input type="file" id="fileImport" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer transition"/>
-                    <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada con fechas exactas!</p>
+                    <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada leyendo la matriz!</p>
                 </div>
             </div>
         </div>
@@ -318,7 +318,7 @@
             renderizarBotonesDias();
         }
 
-        // LECTOR DE EXCEL EXTREMO (EXACTITUD MATEMÁTICA)
+        // ---------- NUEVO LECTOR DE EXCEL (MATRIZ / CALENDARIO) ----------
         let fileInput = document.getElementById('fileImport');
         if(fileInput) {
             fileInput.addEventListener('change', function(e) {
@@ -332,32 +332,63 @@
                     
                     if(json.length < 2) { alert("El Excel parece estar vacío."); return; }
 
-                    // Mapeo automático de columnas
-                    let headerRow = 0;
-                    for(let r = 0; r < 5; r++) { 
-                        if(json[r] && json[r].length > 2) {
-                            let rowStr = json[r].join(" ").toLowerCase();
-                            if(rowStr.includes("linea") || rowStr.includes("línea") || rowStr.includes("maquina") || rowStr.includes("máquina")) {
-                                headerRow = r; break;
-                            }
+                    // 1. Detectar la fila de títulos (donde dice LINEA, ZONAS, ACTIVIDAD...)
+                    let headerRow = -1;
+                    for(let r = 0; r < 10; r++) { 
+                        if(json[r] && json[r].join("").toLowerCase().includes("linea")) {
+                            headerRow = r; break;
                         }
                     }
+                    if(headerRow === -1) headerRow = 1; // Fallback
+
+                    // 2. La fila de fechas siempre es la que está justo arriba de los títulos
+                    let dateRow = headerRow > 0 ? headerRow - 1 : 0; 
 
                     let headers = json[headerRow].map(h => String(h || "").toLowerCase().trim());
                     let cLin = headers.findIndex(h => h.includes('linea') || h.includes('línea'));
-                    let cMaq = headers.findIndex(h => h.includes('maquina') || h.includes('máquina'));
+                    let cMaq = headers.findIndex(h => h.includes('zona') || h.includes('maquina') || h.includes('máquina'));
                     let cAct = headers.findIndex(h => h.includes('actividad') || h.includes('tarea'));
-                    let cDur = headers.findIndex(h => h.includes('duracion') || h.includes('duración') || h.includes('hs'));
-                    let cFre = headers.findIndex(h => h.includes('frec') || h.includes('dias') || h.includes('días'));
-                    let cFec = headers.findIndex(h => h.includes('fecha') || h.includes('ultimo') || h.includes('último') || h.includes('última'));
-                    let cEst = headers.findIndex(h => h.includes('estado') || h.includes('status'));
+                    let cDur = headers.findIndex(h => h.includes('tiempo') || h.includes('duracion') || h.includes('duración') || h.includes('hs'));
+                    let cFre = headers.findIndex(h => h.includes('frecuencia') || h.includes('frec') || h.includes('dias') || h.includes('días'));
                     
                     if(cLin === -1) cLin = 0; if(cMaq === -1) cMaq = 1; if(cAct === -1) cAct = 2;
-                    if(cDur === -1) cDur = 3; if(cFre === -1) cFre = 4; if(cFec === -1) cFec = 5;
+                    if(cDur === -1) cDur = 3; if(cFre === -1) cFre = 4;
 
                     let nuevasTareas = [];
                     let nuevoHistorial = { ...historialLT };
 
+                    // Función interna para parsear la fecha de la fila 1 (dateRow)
+                    function parseExcelDate(excelDate) {
+                        if (!excelDate) return null;
+                        if (excelDate instanceof Date) {
+                            let y = excelDate.getFullYear();
+                            let m = String(excelDate.getMonth() + 1).padStart(2, '0');
+                            let d = String(excelDate.getDate()).padStart(2, '0');
+                            return `${y}-${m}-${d}`;
+                        }
+                        if (typeof excelDate === 'number') {
+                            let jsDate = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
+                            jsDate.setMinutes(jsDate.getMinutes() + jsDate.getTimezoneOffset());
+                            let y = jsDate.getFullYear();
+                            let m = String(jsDate.getMonth() + 1).padStart(2, '0');
+                            let d = String(jsDate.getDate()).padStart(2, '0');
+                            return `${y}-${m}-${d}`;
+                        }
+                        if (typeof excelDate === 'string') {
+                            let txt = excelDate.trim();
+                            let match = txt.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+                            if (match) {
+                                let d = match[1].padStart(2, '0');
+                                let m = match[2].padStart(2, '0');
+                                let y = match[3];
+                                if (y.length === 2) y = "20" + y;
+                                return `${y}-${m}-${d}`;
+                            }
+                        }
+                        return null;
+                    }
+
+                    // 3. Empezar a leer las máquinas (fila por fila, debajo de los títulos)
                     for(let i = headerRow + 1; i < json.length; i++) { 
                         if(!json[i] || json[i].length === 0) continue; 
                         
@@ -379,58 +410,33 @@
                             frecuencia: parseInt(json[i][cFre]) || 7 
                         });
 
-                        // 1. EXTRACTOR QUIRÚRGICO DE FECHA (Sea cual sea el formato)
-                        let fechaFormateada = null;
-                        let fechaExcel = json[i][cFec];
+                        // 4. EL BUSCADOR HORIZONTAL EN LA MATRIZ
+                        // Vamos recorriendo las columnas de esa máquina desde el final (derecha a izquierda)
+                        let ultimaFechaValida = null;
                         
-                        if (fechaExcel) {
-                            if (fechaExcel instanceof Date) {
-                                let y = fechaExcel.getFullYear();
-                                let m = String(fechaExcel.getMonth() + 1).padStart(2, '0');
-                                let d = String(fechaExcel.getDate()).padStart(2, '0');
-                                fechaFormateada = `${y}-${m}-${d}`;
-                            } else if (typeof fechaExcel === 'number') {
-                                let jsDate = new Date(Math.round((fechaExcel - 25569) * 86400 * 1000));
-                                let y = jsDate.getUTCFullYear();
-                                let m = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
-                                let d = String(jsDate.getUTCDate()).padStart(2, '0');
-                                fechaFormateada = `${y}-${m}-${d}`;
-                            } else if (typeof fechaExcel === 'string') {
-                                let txt = fechaExcel.trim();
-                                let match3 = txt.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
-                                let match2 = txt.match(/(\d{1,2})[\/\-\.](\d{1,2})/);
-
-                                if(match3) {
-                                    let d = match3[1].padStart(2, '0');
-                                    let m = match3[2].padStart(2, '0');
-                                    let y = match3[3];
-                                    if(y.length === 2) y = "20" + y; // Asume año 20xx si ponen solo dos dígitos
-                                    fechaFormateada = `${y}-${m}-${d}`;
-                                } else if (match2) {
-                                    let d = match2[1].padStart(2, '0');
-                                    let m = match2[2].padStart(2, '0');
-                                    let y = new Date().getFullYear(); // Autocompleta el año actual
-                                    fechaFormateada = `${y}-${m}-${d}`;
+                        for (let col = json[i].length - 1; col > cFre; col--) {
+                            let celdaEstado = String(json[i][col] || "").trim().toLowerCase();
+                            
+                            // Si en esa celda de la grilla dice Realizado (o pintada con OK, etc.)
+                            if (celdaEstado === 'realizado' || celdaEstado === 'ok' || celdaEstado === 'hecho' || celdaEstado === 'x') {
+                                
+                                // Miramos hacia arriba (a la fila dateRow) en la misma columna para ver qué fecha era
+                                let rawDate = json[dateRow][col];
+                                ultimaFechaValida = parseExcelDate(rawDate);
+                                
+                                if (ultimaFechaValida) {
+                                    break; // Como vamos de derecha a izquierda, encontramos la más reciente. Cortamos.
                                 }
                             }
                         }
 
-                        // 2. LA REGLA DEL "ESTADO" EN EL EXCEL
-                        let estadoExcel = cEst !== -1 && json[i][cEst] ? String(json[i][cEst]).trim().toLowerCase() : "";
-
-                        // Si dice "Pendiente" o si no le pusiste NI fecha NI estado -> Nunca se hizo.
-                        if (estadoExcel === 'pendiente' || estadoExcel === 'no realizado' || (!fechaFormateada && !estadoExcel)) {
-                            delete nuevoHistorial[idFijo]; // Lo borra de la memoria para que sea Urgente (999 días)
-                            delete reprogramadasLT[idFijo];
-                        } 
-                        // Si logramos sacar una fecha de tu celda, ESA fecha manda.
-                        else if (fechaFormateada) {
-                            nuevoHistorial[idFijo] = fechaFormateada;
-                            delete reprogramadasLT[idFijo];
-                        }
-                        // Si le pusiste "Realizado" pero te olvidaste de escribirle una fecha, asume que fue hoy.
-                        else if (estadoExcel === 'realizado' || estadoExcel === 'ok' || estadoExcel === 'hecho' || estadoExcel === 'completo') {
-                            nuevoHistorial[idFijo] = getFechaHoy();
+                        // 5. Si encontramos la fecha, la grabamos.
+                        if (ultimaFechaValida) {
+                            nuevoHistorial[idFijo] = ultimaFechaValida;
+                            delete reprogramadasLT[idFijo]; // Limpia repateos viejos
+                        } else {
+                            // Si recorrimos toda la fila y no dice Realizado en ningún lado, significa que nunca se hizo.
+                            delete nuevoHistorial[idFijo];
                             delete reprogramadasLT[idFijo];
                         }
                     }
@@ -438,7 +444,6 @@
                     let statusImp = document.getElementById('statusImport');
                     if(statusImp) statusImp.classList.remove('hidden');
                     
-                    // Guarda la matriz y el historial estricto extraído del Excel
                     db.ref('lt_data/baseTareas').set(nuevasTareas);
                     db.ref('lt_data/historialLT').set(nuevoHistorial).then(() => {
                         setTimeout(() => {
@@ -490,7 +495,6 @@
             let [y, m, d] = fechaSimulada.split('-');
             let diaSemanaSimulado = new Date(y, m-1, d).getDay();
 
-            // LÓGICA MATEMÁTICA DE VENCIMIENTO
             let tareasEvaluadas = baseTareas.map(t => {
                 let ultVez = historialLT[t.id];
                 let movidaPara = reprogramadasLT[t.id];
@@ -498,7 +502,6 @@
                 
                 if(ultVez) diasPasados = Math.floor((new Date(fechaSimulada) - new Date(ultVez)) / (1000*60*60*24));
                 
-                // TU REGLA: Toca si los días pasados son Mayores o Iguales a la Frecuencia
                 let tocaHoy = (movidaPara === fechaSimulada) || (diasPasados >= t.frecuencia);
                 if(ultVez === fechaSimulada || (ultVez && ultVez > fechaSimulada)) tocaHoy = false;
 
