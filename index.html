@@ -57,7 +57,10 @@
 
             <div>
                 <div class="flex justify-between items-end mb-3">
-                    <h3 class="font-bold text-gray-700">Listado de Tareas del Día</h3>
+                    <div>
+                        <h3 class="font-bold text-gray-700 inline-block">Listado de Tareas del Día</h3>
+                        <span id="horasUsadas" class="ml-3 text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">Cargando...</span>
+                    </div>
                     <button onclick="copiarParteDiario(this)" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded text-xs font-bold shadow-sm btn-click transition flex items-center">
                         <i class="fa-solid fa-copy mr-2"></i> Copiar para Excel
                     </button>
@@ -117,7 +120,7 @@
 
             <div class="bg-white border rounded-lg shadow-sm p-6">
                 <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-layer-group mr-2 text-blue-600"></i> Reglas de Agrupamiento y Anclaje</h3>
-                <p class="text-xs text-gray-500 mb-4">Definí palabras clave (ej: "M1"). Si no asignás día, se forzará su programación conjunta.</p>
+                <p class="text-xs text-gray-500 mb-4">Definí palabras clave (ej: "M3"). Si no asignás día, se forzará su programación conjunta.</p>
                 
                 <div class="flex space-x-2">
                     <input type="text" id="nuevoGrupo" placeholder="Palabra clave..." class="border rounded p-2 text-sm w-48 shadow-sm">
@@ -478,10 +481,13 @@
 
         function recalcularPlan() {
             let tbody = document.getElementById('tablaTareas');
+            let lblHoras = document.getElementById('horasUsadas');
+            
             if(!tbody) return;
 
             if(!baseTareas || baseTareas.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold bg-gray-50"><i class="fa-solid fa-file-excel mr-2"></i> Esperando carga de la Base Maestra...</td></tr>';
+                if(lblHoras) lblHoras.innerHTML = '';
                 return;
             }
 
@@ -509,7 +515,6 @@
                 let desc = (t.maquina + " " + t.actividad).toUpperCase();
                 let esAGVKP1 = desc.includes("AGV") && t.linea.toUpperCase().includes("KP1");
                 
-                // Agregamos la propiedad grupoId vacía por defecto
                 return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica, esProd: esAGVKP1, esAdelanto: false, grupoId: null};
             });
 
@@ -529,7 +534,7 @@
                             if(historialLT[t.id] !== fechaSimulada) { 
                                 t.tocaHoy = true; 
                                 t.esFijadaHoy = true; 
-                                t.grupoId = keyword; // SELLAMOS EL GRUPO
+                                t.grupoId = keyword;
                                 if(regla.esProd) t.esProd = true;
                             }
                         });
@@ -566,15 +571,10 @@
             planActualVista = [];
             let hC = 0, hK = 0, hTotal = 0;
             let tolerancia = 1.0; 
-            
-            // LÓGICA DE BLOQUE INDIVISIBLE
-            let gruposAceptados = new Set();
-            let gruposRechazados = new Set();
 
             for(let t of tareasDisponibles) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
                 
-                // VETO DEL SLIDER (Fuerza bruta del usuario)
                 if (esCronos && pctCronos === 0) continue; 
                 if (!esCronos && pctCronos === 100) continue; 
                 
@@ -585,33 +585,12 @@
 
                 let entra = false;
                 
+                // LA MAGIA: Si la tarea tiene un grupo forzado (esFijadaHoy), ENTRA SÍ O SÍ.
+                // Se acabó el límite de 8 horas cortando los grupos a la mitad.
                 if (t.esFijadaHoy) {
-                    // Si ya decidimos que este grupo no entraba, salteamos la tarea
-                    if (gruposRechazados.has(t.grupoId)) continue;
-                    
-                    // Si es la primera vez que vemos una tarea de este grupo, evaluamos el grupo entero
-                    if (!gruposAceptados.has(t.grupoId)) {
-                        let tareasDelMismoGrupo = tareasDisponibles.filter(x => x.grupoId === t.grupoId && !x.esProd);
-                        
-                        let duracionGrupo = 0;
-                        for (let x of tareasDelMismoGrupo) {
-                            let xCronos = x.linea.toUpperCase().includes('CRONOS');
-                            if (xCronos && pctCronos === 0) continue;
-                            if (!xCronos && pctCronos === 100) continue;
-                            duracionGrupo += x.duracion;
-                        }
-
-                        // Si todo el grupo sumado entra en las horas restantes (o si el tablero está vacío para no trabar)
-                        if (hTotal + duracionGrupo <= capHoras + tolerancia || hTotal === 0) {
-                            gruposAceptados.add(t.grupoId);
-                        } else {
-                            gruposRechazados.add(t.grupoId);
-                            continue; // No entra el grupo, pasamos a la siguiente tarea
-                        }
-                    }
-                    entra = true; // Si llegamos acá, el grupo fue aceptado
+                    entra = true; 
                 } else {
-                    // Tareas normales (Individuales)
+                    // Tareas individuales siguen respetando la matemática normal de capacidad
                     if (esCronos) {
                         if (maxCronos > 0 && (hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
                             entra = true;
@@ -624,16 +603,25 @@
                 }
 
                 if (entra) {
-                    if (!t.tocaHoy) t.esAdelanto = true; 
+                    if (!t.tocaHoy && !t.esFijadaHoy) t.esAdelanto = true; 
                     planActualVista.push(t);
                     if (esCronos) hC += t.duracion; else hK += t.duracion;
                     hTotal += t.duracion;
                 }
             }
 
+            // Actualiza el indicador visual de horas usadas
+            if (lblHoras) {
+                if (hTotal > capHoras) {
+                    lblHoras.innerHTML = `Consumo: <span class="text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> ${hTotal} hs</span> (Excede capacidad por grupos)`;
+                } else {
+                    lblHoras.innerHTML = `Consumo: <span class="text-green-600">${hTotal} / ${capHoras} hs</span>`;
+                }
+            }
+
             tbody.innerHTML = '';
             if(planActualVista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold bg-gray-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Toda la planta está al día o bloqueaste la línea con el slider.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold bg-gray-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Toda la planta está al día.</td></tr>';
                 return;
             }
 
