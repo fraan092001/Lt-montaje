@@ -122,7 +122,6 @@
                 </div>
                 <div class="border-t pt-4">
                     <h4 class="font-bold text-gray-700 text-sm mb-1">Actualizar Base (Matriz Calendario)</h4>
-                    <p class="text-xs text-gray-500 mb-4">Escanea el Excel buscando 'Realizado' directamente bajo las fechas (ej: Col BQ - 02/09).</p>
                     <input type="file" id="fileImport" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
                     <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada perfectamente!</p>
                 </div>
@@ -257,7 +256,7 @@
 
         function seleccionarDia(dateStr) { fechaSimulada = dateStr; renderizarBotonesDias(); }
 
-        // EXCEL PARSER DIRECTO Y EXACTO (Lee la Fila 0 para fechas)
+        // EXCEL PARSER (Lee fechas directo de fila 0)
         let fileInput = document.getElementById('fileImport');
         if(fileInput) {
             fileInput.addEventListener('change', function(e) {
@@ -271,7 +270,6 @@
                     
                     if(json.length < 3) return;
 
-                    // En tu archivo, Fila 0 = Fechas, Fila 1 = Títulos de columnas
                     let dateRow = 0;
                     let headerRow = 1;
 
@@ -325,14 +323,12 @@
                             duracion: parseFloat(durStr) || 0.5, frecuencia: parseInt(json[i][cFre]) || 7 
                         });
 
-                        // Busca "Realizado" escaneando la fila desde el final hacia el principio
                         let ultimaFechaValida = null;
                         let maxCols = Math.max(json[0].length, json[i].length);
                         
                         for (let col = maxCols - 1; col > cFre; col--) {
                             let celdaEstado = String(json[i][col] || "").trim().toLowerCase();
                             if (celdaEstado === 'realizado' || celdaEstado === 'ok' || celdaEstado === 'hecho' || celdaEstado === 'x') {
-                                // Saca la fecha exacta de la fila 0, columna 'col' (Ej: Col BQ)
                                 let fechaArriba = json[dateRow][col];
                                 ultimaFechaValida = parseExcelDateEx(fechaArriba);
                                 if (ultimaFechaValida) break; 
@@ -372,16 +368,16 @@
             let lblHoras = document.getElementById('horasUsadas');
             if(!tbody) return;
             if(!baseTareas || baseTareas.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500">Sin datos.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500">Sin datos. Subí tu Excel.</td></tr>';
                 return;
             }
 
             let capHoras = parseFloat(document.getElementById('inputHoras').value) || 8;
             let pctCronos = parseInt(document.getElementById('sliderMezcla').value);
-            let maxCronos = capHoras * (pctCronos / 100);
-            let maxKP1 = capHoras * ((100 - pctCronos) / 100);
-
-            // 1. Evaluar todas las tareas
+            
+            let [y, m, d] = fechaSimulada.split('-');
+            
+            // 1. Preparación de Tareas y Grupos
             let tareasEvaluadas = baseTareas.map(t => {
                 let ultVez = historialLT[t.id];
                 let movidaPara = reprogramadasLT[t.id];
@@ -390,85 +386,103 @@
                 let tocaHoy = (movidaPara === fechaSimulada) || (diasPasados >= t.frecuencia);
                 if(ultVez && ultVez >= fechaSimulada) tocaHoy = false;
 
-                // DETECTOR AUTOMÁTICO DE GRUPOS (M1, M2, M3...)
+                // Detector Automático de Grupos M
                 let descGrupo = (t.maquina + " " + t.actividad).toUpperCase();
                 let matchG = descGrupo.match(/\(M\d+\)/);
-                let grupoId = matchG ? matchG[0] : null; // Ej: "(M3)"
-
+                let grupoId = matchG ? matchG[0] : null; 
                 let esAGVKP1 = descGrupo.includes("AGV") && t.linea.toUpperCase().includes("KP1");
 
-                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esProd: esAGVKP1, grupoId: grupoId};
+                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esProd: esAGVKP1, grupoId: grupoId};
             });
 
-            // 2. SINCRONIZAR LOS GRUPOS (Si a una M3 le toca, le toca a todas las M3)
-            let mapGrupos = {};
+            // 2. Unificar Urgencia de los Grupos y Sumar sus horas
+            let statsGrupo = {};
             tareasEvaluadas.forEach(t => {
-                if(t.grupoId) {
-                    if(!mapGrupos[t.grupoId]) mapGrupos[t.grupoId] = [];
-                    mapGrupos[t.grupoId].push(t);
+                if(t.grupoId && !t.esProd) {
+                    if(!statsGrupo[t.grupoId]) statsGrupo[t.grupoId] = { maxDias: -1, tocaHoy: false, duracionSum: 0 };
+                    if(t.diasPasados > statsGrupo[t.grupoId].maxDias) statsGrupo[t.grupoId].maxDias = t.diasPasados;
+                    if(t.tocaHoy) statsGrupo[t.grupoId].tocaHoy = true;
+                    statsGrupo[t.grupoId].duracionSum += t.duracion;
                 }
             });
 
-            for(let g in mapGrupos) {
-                let miembros = mapGrupos[g];
-                if(miembros.some(m => m.tocaHoy)) {
-                    miembros.forEach(m => { m.tocaHoy = true; m.esFijadaHoy = true; }); // Forzamos todo el grupo
+            tareasEvaluadas.forEach(t => {
+                if(t.grupoId && !t.esProd) {
+                    t.diasPasados = statsGrupo[t.grupoId].maxDias;
+                    t.tocaHoy = statsGrupo[t.grupoId].tocaHoy;
                 }
-            }
+            });
 
             let omitidas = tareasOmitidasPorDia[fechaSimulada] || [];
             let disponibles = tareasEvaluadas.filter(t => !omitidas.includes(t.id));
 
-            // Orden: Prod primero, luego ToDo, luego Grupos, luego normal
+            // Orden Prioritario
             disponibles.sort((a, b) => {
                 if(a.esProd && !b.esProd) return -1;
                 if(!a.esProd && b.esProd) return 1;
                 if(a.tocaHoy && !b.tocaHoy) return -1;
                 if(!a.tocaHoy && b.tocaHoy) return 1;
-                if(a.esFijadaHoy && !b.esFijadaHoy) return -1;
-                if(!a.esFijadaHoy && b.esFijadaHoy) return 1;
-                return b.diasPasados - a.diasPasados;
+                let ratioA = a.diasPasados / a.frecuencia;
+                let ratioB = b.diasPasados / b.frecuencia;
+                return ratioB - ratioA; 
             });
 
             planActualVista = [];
-            let hC = 0, hK = 0, hTotal = 0;
+            let hTotal = 0;
+            let tolerancia = 1.0; 
+            
+            let gruposAceptados = new Set();
+            let gruposRechazados = new Set();
 
-            // 3. ASIGNAR LAS HORAS Y ROMPER LIMITES PARA GRUPOS
+            // 3. LA EVALUACIÓN ESTRICTA (Grupo vs Capacidad)
             for(let t of disponibles) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
                 
+                // VETO DEL SLIDER
                 if (esCronos && pctCronos === 0) continue; 
                 if (!esCronos && pctCronos === 100) continue; 
                 
                 if(t.esProd) {
-                    if(t.tocaHoy) planActualVista.push(t);
+                    if (t.tocaHoy) planActualVista.push(t);
                     continue; 
                 }
 
                 let entra = false;
                 
-                // Si es un GRUPO (M1, M3), ENTRA ENTERO sin importar la restricción de horas
-                if (t.esFijadaHoy) {
-                    entra = true; 
-                } else {
-                    // Tareas sueltas sí respetan la regla
-                    if (esCronos) {
-                        if (maxCronos > 0 && (hC + t.duracion <= maxCronos + 0.5) && (hTotal + t.duracion <= capHoras + 0.5)) entra = true;
+                if (t.grupoId) {
+                    if (gruposRechazados.has(t.grupoId)) continue; // Si el grupo ya fue rechazado, salteamos la tarea
+                    
+                    if (gruposAceptados.has(t.grupoId)) {
+                        entra = true; // Si el grupo fue aceptado, entra seguro
                     } else {
-                        if (maxKP1 > 0 && (hK + t.duracion <= maxKP1 + 0.5) && (hTotal + t.duracion <= capHoras + 0.5)) entra = true;
+                        // Es la primera tarea del grupo que evaluamos. ¿Entra todo el grupo?
+                        let durGrupoCompleto = statsGrupo[t.grupoId].duracionSum;
+                        
+                        // Entra si el día está vacío (para no trabar grupos inmensos) o si hay horas suficientes
+                        if (hTotal === 0 || (hTotal + durGrupoCompleto <= capHoras + tolerancia)) {
+                            gruposAceptados.add(t.grupoId);
+                            entra = true;
+                        } else {
+                            gruposRechazados.add(t.grupoId);
+                            continue; // Grupo rechazado, queda para mañana.
+                        }
+                    }
+                } else {
+                    // Tareas individuales
+                    if (hTotal + t.duracion <= capHoras + tolerancia) {
+                        entra = true;
                     }
                 }
 
                 if (entra) {
                     planActualVista.push(t);
-                    if (esCronos) hC += t.duracion; else hK += t.duracion;
                     hTotal += t.duracion;
                 }
             }
 
             if (lblHoras) {
-                if (hTotal > capHoras) lblHoras.innerHTML = `Consumo: <span class="text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> ${hTotal} hs</span> (Turno Excedido por Grupo Indivisible)`;
-                else lblHoras.innerHTML = `Consumo: <span class="text-green-600">${hTotal} / ${capHoras} hs</span>`;
+                if (hTotal > capHoras) lblHoras.innerHTML = `Consumo: <span class="text-amber-600 font-bold">${hTotal} hs</span> (Excede capacidad permitida)`;
+                else lblHoras.innerHTML = `Consumo: <span class="text-green-600 font-bold">${hTotal} / ${capHoras} hs</span>`;
             }
 
             tbody.innerHTML = '';
@@ -483,6 +497,7 @@
                 let reproTag = '';
                 if (t.esProd) reproTag = `<span class="ml-2 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-bold"><i class="fa-solid fa-bolt"></i> Producción</span>`;
                 else if (t.grupoId) reproTag = `<span class="ml-2 text-[10px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded font-bold">GRUPO ${t.grupoId}</span>`;
+                else if (t.esRepro) reproTag = `<span class="ml-2 text-[10px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded font-bold">Reprogramada</span>`;
                 
                 let duracionVisual = t.esProd ? `<span class="text-emerald-600 font-bold"><i class="fa-solid fa-bolt mr-1"></i>0 hs</span>` : `${t.duracion} hs`;
 
