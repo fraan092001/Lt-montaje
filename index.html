@@ -149,10 +149,10 @@
                 </div>
                 
                 <div class="border-t pt-4">
-                    <h4 class="font-bold text-gray-700 text-sm mb-1">Actualizar Base (Opcional)</h4>
-                    <p class="text-xs text-gray-500 mb-4">Solo subí un nuevo Excel si agregaste máquinas o cambiaste frecuencias. El historial no se borrará.</p>
+                    <h4 class="font-bold text-gray-700 text-sm mb-1">Actualizar Base (Excel)</h4>
+                    <p class="text-xs text-gray-500 mb-4">La App ahora lee tu columna Fecha y calcula automáticamente el próximo vencimiento según la Frecuencia.</p>
                     <input type="file" id="fileImport" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer transition"/>
-                    <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada en la nube exitosamente!</p>
+                    <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada con fechas exactas!</p>
                 </div>
             </div>
         </div>
@@ -318,6 +318,7 @@
             renderizarBotonesDias();
         }
 
+        // LECTOR DE EXCEL EXTREMO (EXACTITUD MATEMÁTICA)
         let fileInput = document.getElementById('fileImport');
         if(fileInput) {
             fileInput.addEventListener('change', function(e) {
@@ -331,6 +332,7 @@
                     
                     if(json.length < 2) { alert("El Excel parece estar vacío."); return; }
 
+                    // Mapeo automático de columnas
                     let headerRow = 0;
                     for(let r = 0; r < 5; r++) { 
                         if(json[r] && json[r].length > 2) {
@@ -348,6 +350,7 @@
                     let cDur = headers.findIndex(h => h.includes('duracion') || h.includes('duración') || h.includes('hs'));
                     let cFre = headers.findIndex(h => h.includes('frec') || h.includes('dias') || h.includes('días'));
                     let cFec = headers.findIndex(h => h.includes('fecha') || h.includes('ultimo') || h.includes('último') || h.includes('última'));
+                    let cEst = headers.findIndex(h => h.includes('estado') || h.includes('status'));
                     
                     if(cLin === -1) cLin = 0; if(cMaq === -1) cMaq = 1; if(cAct === -1) cAct = 2;
                     if(cDur === -1) cDur = 3; if(cFre === -1) cFre = 4; if(cFec === -1) cFec = 5;
@@ -376,44 +379,66 @@
                             frecuencia: parseInt(json[i][cFre]) || 7 
                         });
 
+                        // 1. EXTRACTOR QUIRÚRGICO DE FECHA (Sea cual sea el formato)
+                        let fechaFormateada = null;
                         let fechaExcel = json[i][cFec];
+                        
                         if (fechaExcel) {
-                            let fechaFormateada = "";
-                            try {
-                                if (fechaExcel instanceof Date) {
-                                    let y = fechaExcel.getFullYear();
-                                    let m = String(fechaExcel.getMonth() + 1).padStart(2, '0');
-                                    let d = String(fechaExcel.getDate()).padStart(2, '0');
+                            if (fechaExcel instanceof Date) {
+                                let y = fechaExcel.getFullYear();
+                                let m = String(fechaExcel.getMonth() + 1).padStart(2, '0');
+                                let d = String(fechaExcel.getDate()).padStart(2, '0');
+                                fechaFormateada = `${y}-${m}-${d}`;
+                            } else if (typeof fechaExcel === 'number') {
+                                let jsDate = new Date(Math.round((fechaExcel - 25569) * 86400 * 1000));
+                                let y = jsDate.getUTCFullYear();
+                                let m = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
+                                let d = String(jsDate.getUTCDate()).padStart(2, '0');
+                                fechaFormateada = `${y}-${m}-${d}`;
+                            } else if (typeof fechaExcel === 'string') {
+                                let txt = fechaExcel.trim();
+                                let match3 = txt.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+                                let match2 = txt.match(/(\d{1,2})[\/\-\.](\d{1,2})/);
+
+                                if(match3) {
+                                    let d = match3[1].padStart(2, '0');
+                                    let m = match3[2].padStart(2, '0');
+                                    let y = match3[3];
+                                    if(y.length === 2) y = "20" + y; // Asume año 20xx si ponen solo dos dígitos
                                     fechaFormateada = `${y}-${m}-${d}`;
-                                } else if (typeof fechaExcel === 'number') {
-                                    let jsDate = new Date(Math.round((fechaExcel - 25569) * 86400 * 1000));
-                                    let y = jsDate.getUTCFullYear();
-                                    let m = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
-                                    let d = String(jsDate.getUTCDate()).padStart(2, '0');
+                                } else if (match2) {
+                                    let d = match2[1].padStart(2, '0');
+                                    let m = match2[2].padStart(2, '0');
+                                    let y = new Date().getFullYear(); // Autocompleta el año actual
                                     fechaFormateada = `${y}-${m}-${d}`;
-                                } else if (typeof fechaExcel === 'string') {
-                                    let txt = fechaExcel.trim();
-                                    if (txt.toLowerCase() === 'pendiente' || txt.toLowerCase() === 'realizado') continue;
-                                    
-                                    if (txt.includes('/')) {
-                                        let p = txt.split('/');
-                                        if(p[0].length <= 2) fechaFormateada = `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
-                                        else fechaFormateada = txt.replace(/\//g, '-');
-                                    } else {
-                                        fechaFormateada = txt; 
-                                    }
                                 }
-                            } catch(e) {}
-                            
-                            if (fechaFormateada && fechaFormateada.length === 10) {
-                                nuevoHistorial[idFijo] = fechaFormateada;
                             }
+                        }
+
+                        // 2. LA REGLA DEL "ESTADO" EN EL EXCEL
+                        let estadoExcel = cEst !== -1 && json[i][cEst] ? String(json[i][cEst]).trim().toLowerCase() : "";
+
+                        // Si dice "Pendiente" o si no le pusiste NI fecha NI estado -> Nunca se hizo.
+                        if (estadoExcel === 'pendiente' || estadoExcel === 'no realizado' || (!fechaFormateada && !estadoExcel)) {
+                            delete nuevoHistorial[idFijo]; // Lo borra de la memoria para que sea Urgente (999 días)
+                            delete reprogramadasLT[idFijo];
+                        } 
+                        // Si logramos sacar una fecha de tu celda, ESA fecha manda.
+                        else if (fechaFormateada) {
+                            nuevoHistorial[idFijo] = fechaFormateada;
+                            delete reprogramadasLT[idFijo];
+                        }
+                        // Si le pusiste "Realizado" pero te olvidaste de escribirle una fecha, asume que fue hoy.
+                        else if (estadoExcel === 'realizado' || estadoExcel === 'ok' || estadoExcel === 'hecho' || estadoExcel === 'completo') {
+                            nuevoHistorial[idFijo] = getFechaHoy();
+                            delete reprogramadasLT[idFijo];
                         }
                     }
                     
                     let statusImp = document.getElementById('statusImport');
                     if(statusImp) statusImp.classList.remove('hidden');
                     
+                    // Guarda la matriz y el historial estricto extraído del Excel
                     db.ref('lt_data/baseTareas').set(nuevasTareas);
                     db.ref('lt_data/historialLT').set(nuevoHistorial).then(() => {
                         setTimeout(() => {
@@ -465,6 +490,7 @@
             let [y, m, d] = fechaSimulada.split('-');
             let diaSemanaSimulado = new Date(y, m-1, d).getDay();
 
+            // LÓGICA MATEMÁTICA DE VENCIMIENTO
             let tareasEvaluadas = baseTareas.map(t => {
                 let ultVez = historialLT[t.id];
                 let movidaPara = reprogramadasLT[t.id];
@@ -472,12 +498,12 @@
                 
                 if(ultVez) diasPasados = Math.floor((new Date(fechaSimulada) - new Date(ultVez)) / (1000*60*60*24));
                 
+                // TU REGLA: Toca si los días pasados son Mayores o Iguales a la Frecuencia
                 let tocaHoy = (movidaPara === fechaSimulada) || (diasPasados >= t.frecuencia);
                 if(ultVez === fechaSimulada || (ultVez && ultVez > fechaSimulada)) tocaHoy = false;
 
                 let esCritica = diasPasados >= (t.frecuencia * 1.30);
                 
-                // CONDICIÓN ESPECÍFICA: Solo los AGV de la línea KP1 son Producción
                 let desc = (t.maquina + " " + t.actividad).toUpperCase();
                 let esAGVKP1 = desc.includes("AGV") && t.linea.toUpperCase().includes("KP1");
                 
@@ -530,11 +556,9 @@
             for(let t of tareasHoy) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
                 
-                // EL VETO DEL SLIDER MANDA SOBRE TODO (Incluso Producción)
                 if (esCronos && pctCronos === 0) continue; 
                 if (!esCronos && pctCronos === 100) continue; 
                 
-                // Si la tarea es de Producción, entra sin restar capacidad de las 8hs
                 if(t.esProd) {
                     planActualVista.push(t);
                     continue; 
