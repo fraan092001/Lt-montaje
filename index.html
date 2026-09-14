@@ -117,7 +117,7 @@
 
             <div class="bg-white border rounded-lg shadow-sm p-6">
                 <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-layer-group mr-2 text-blue-600"></i> Reglas de Agrupamiento y Anclaje</h3>
-                <p class="text-xs text-gray-500 mb-4">Definí palabras clave (ej: "MESA ARMO"). Si no asignás día, se forzará su programación conjunta.</p>
+                <p class="text-xs text-gray-500 mb-4">Definí palabras clave (ej: "M1"). Si no asignás día, se forzará su programación conjunta.</p>
                 
                 <div class="flex space-x-2">
                     <input type="text" id="nuevoGrupo" placeholder="Palabra clave..." class="border rounded p-2 text-sm w-48 shadow-sm">
@@ -180,9 +180,6 @@
         let fechaSimulada = getFechaHoy(); 
         let planActualVista = []; 
         let currentTab = 'dashboard';
-        
-        // LA NUEVA MEMORIA: Almacena las tareas rotadas separadas por DÍA. 
-        // Así no se borran al cambiar de pestaña o de slider.
         let tareasOmitidasPorDia = {}; 
 
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -247,7 +244,6 @@
             if(tab === 'auditoria') generarMatrizMes();
             if(tab === 'dashboard') {
                 fechaSimulada = getFechaHoy();
-                // Eliminé el reseteo de omitidas acá para que no pierda memoria al volver
                 renderizarBotonesDias();
             }
             if(tab === 'config') {
@@ -317,7 +313,6 @@
 
         function seleccionarDia(dateStr) {
             fechaSimulada = dateStr;
-            // Eliminé el reseteo de omitidas acá.
             renderizarBotonesDias();
         }
 
@@ -542,11 +537,9 @@
                 }
             }
 
-            // Excluimos las que rotaste "hoy" para que no vuelvan a aparecer
             let omitidasHoy = tareasOmitidasPorDia[fechaSimulada] || [];
             let tareasDisponibles = tareasEvaluadas.filter(t => !omitidasHoy.includes(t.id));
 
-            // ORDEN INTELIGENTE (TETRIS): Prioriza urgencias y luego acerca adelantos
             tareasDisponibles.sort((a, b) => {
                 if(a.esProd && !b.esProd) return -1;
                 if(!a.esProd && b.esProd) return 1;
@@ -563,7 +556,6 @@
                     if(!a.esRepro && b.esRepro) return 1;
                 }
 
-                // Las que no tocan hoy (Adelantos) se ordenan por cercanía a vencer (Mayor ratio primero)
                 let ratioA = a.diasPasados / a.frecuencia;
                 let ratioB = b.diasPasados / b.frecuencia;
                 return ratioB - ratioA; 
@@ -571,7 +563,7 @@
 
             planActualVista = [];
             let hC = 0, hK = 0, hTotal = 0;
-            let tolerancia = 1.0; // Aumentado para permitir rellenar mejor los huecos
+            let tolerancia = 1.0; 
 
             for(let t of tareasDisponibles) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
@@ -580,24 +572,33 @@
                 if (!esCronos && pctCronos === 100) continue; 
                 
                 if(t.esProd) {
-                    if (t.tocaHoy) planActualVista.push(t); // Solo agregamos AGVs si les toca, no los adelantamos a lo loco.
+                    if (t.tocaHoy) planActualVista.push(t);
                     continue; 
                 }
 
                 let entra = false;
                 
-                if (esCronos) {
-                    if (maxCronos > 0 && (hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
+                // LÓGICA DE BLOQUE INDIVISIBLE PARA GRUPOS
+                if (t.esFijadaHoy) {
+                    // Si pertenece a un grupo, ignora el límite del porcentaje para no partir al grupo a la mitad,
+                    // siempre y cuando quede capacidad total en las 8hs.
+                    if (hTotal + t.duracion <= capHoras + tolerancia) {
                         entra = true;
                     }
                 } else {
-                    if (maxKP1 > 0 && (hK + t.duracion <= maxKP1 + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
-                        entra = true;
+                    if (esCronos) {
+                        if (maxCronos > 0 && (hC + t.duracion <= maxCronos + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
+                            entra = true;
+                        }
+                    } else {
+                        if (maxKP1 > 0 && (hK + t.duracion <= maxKP1 + tolerancia) && (hTotal + t.duracion <= capHoras + tolerancia)) {
+                            entra = true;
+                        }
                     }
                 }
 
                 if (entra) {
-                    if (!t.tocaHoy) t.esAdelanto = true; // Etiqueta a la tarea sacada del futuro
+                    if (!t.tocaHoy) t.esAdelanto = true; 
                     planActualVista.push(t);
                     if (esCronos) hC += t.duracion; else hK += t.duracion;
                     hTotal += t.duracion;
@@ -644,7 +645,6 @@
             });
         }
 
-        // Graba el ID rotado en la fecha actual para que no se borre al moverse
         function cambiarTarea(id) {
             if (!tareasOmitidasPorDia[fechaSimulada]) {
                 tareasOmitidasPorDia[fechaSimulada] = [];
