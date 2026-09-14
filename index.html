@@ -180,7 +180,10 @@
         let fechaSimulada = getFechaHoy(); 
         let planActualVista = []; 
         let currentTab = 'dashboard';
-        let tareasOmitidasHoy = [];
+        
+        // LA NUEVA MEMORIA: Almacena las tareas rotadas separadas por DÍA. 
+        // Así no se borran al cambiar de pestaña o de slider.
+        let tareasOmitidasPorDia = {}; 
 
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
         const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes"};
@@ -244,7 +247,7 @@
             if(tab === 'auditoria') generarMatrizMes();
             if(tab === 'dashboard') {
                 fechaSimulada = getFechaHoy();
-                tareasOmitidasHoy = []; 
+                // Eliminé el reseteo de omitidas acá para que no pierda memoria al volver
                 renderizarBotonesDias();
             }
             if(tab === 'config') {
@@ -314,11 +317,10 @@
 
         function seleccionarDia(dateStr) {
             fechaSimulada = dateStr;
-            tareasOmitidasHoy = []; 
+            // Eliminé el reseteo de omitidas acá.
             renderizarBotonesDias();
         }
 
-        // LECTOR DE EXCEL MATRIZ (MODO RASTREADOR)
         let fileInput = document.getElementById('fileImport');
         if(fileInput) {
             fileInput.addEventListener('change', function(e) {
@@ -364,9 +366,9 @@
                         if (typeof excelDate === 'number') {
                             let jsDate = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
                             jsDate.setMinutes(jsDate.getMinutes() + jsDate.getTimezoneOffset());
-                            let y = jsDate.getUTCFullYear();
-                            let m = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
-                            let d = String(jsDate.getUTCDate()).padStart(2, '0');
+                            let y = jsDate.getFullYear();
+                            let m = String(jsDate.getMonth() + 1).padStart(2, '0');
+                            let d = String(jsDate.getDate()).padStart(2, '0');
                             return `${y}-${m}-${d}`;
                         }
                         if (typeof excelDate === 'string') {
@@ -383,7 +385,6 @@
                         return null;
                     }
 
-                    // Calculamos el ancho máximo de columnas para no perder nada
                     let maxCols = 0;
                     for(let r=0; r<=Math.min(headerRow+2, json.length-1); r++) { 
                         if(json[r]) maxCols = Math.max(maxCols, json[r].length); 
@@ -418,7 +419,6 @@
                             
                             if (celdaEstado === 'realizado' || celdaEstado === 'ok' || celdaEstado === 'hecho' || celdaEstado === 'x') {
                                 
-                                // RASTREADOR: Escanea hacia arriba y hacia la izquierda (sorteando celdas combinadas)
                                 for (let c = col; c >= cFre; c--) { 
                                     for (let r = headerRow; r >= 0; r--) { 
                                         if (json[r] && json[r][c]) {
@@ -514,7 +514,7 @@
                 let desc = (t.maquina + " " + t.actividad).toUpperCase();
                 let esAGVKP1 = desc.includes("AGV") && t.linea.toUpperCase().includes("KP1");
                 
-                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica, esProd: esAGVKP1};
+                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esFijadaHoy: false, esCritica: esCritica, esProd: esAGVKP1, esAdelanto: false};
             });
 
             for(let regla of reglasGrupos) {
@@ -542,32 +542,45 @@
                 }
             }
 
-            let tareasHoy = tareasEvaluadas.filter(t => t.tocaHoy && !tareasOmitidasHoy.includes(t.id));
+            // Excluimos las que rotaste "hoy" para que no vuelvan a aparecer
+            let omitidasHoy = tareasOmitidasPorDia[fechaSimulada] || [];
+            let tareasDisponibles = tareasEvaluadas.filter(t => !omitidasHoy.includes(t.id));
 
-            tareasHoy.sort((a, b) => {
+            // ORDEN INTELIGENTE (TETRIS): Prioriza urgencias y luego acerca adelantos
+            tareasDisponibles.sort((a, b) => {
                 if(a.esProd && !b.esProd) return -1;
                 if(!a.esProd && b.esProd) return 1;
-                if(a.esCritica && !b.esCritica) return -1;
-                if(!a.esCritica && b.esCritica) return 1;
-                if(a.esFijadaHoy && !b.esFijadaHoy) return -1;
-                if(!a.esFijadaHoy && b.esFijadaHoy) return 1;
-                if(a.esRepro && !b.esRepro) return -1;
-                if(!a.esRepro && b.esRepro) return 1;
-                return b.diasPasados - a.diasPasados;
+
+                if(a.tocaHoy && !b.tocaHoy) return -1;
+                if(!a.tocaHoy && b.tocaHoy) return 1;
+
+                if(a.tocaHoy && b.tocaHoy) {
+                    if(a.esCritica && !b.esCritica) return -1;
+                    if(!a.esCritica && b.esCritica) return 1;
+                    if(a.esFijadaHoy && !b.esFijadaHoy) return -1;
+                    if(!a.esFijadaHoy && b.esFijadaHoy) return 1;
+                    if(a.esRepro && !b.esRepro) return -1;
+                    if(!a.esRepro && b.esRepro) return 1;
+                }
+
+                // Las que no tocan hoy (Adelantos) se ordenan por cercanía a vencer (Mayor ratio primero)
+                let ratioA = a.diasPasados / a.frecuencia;
+                let ratioB = b.diasPasados / b.frecuencia;
+                return ratioB - ratioA; 
             });
 
             planActualVista = [];
             let hC = 0, hK = 0, hTotal = 0;
-            let tolerancia = 0.5;
+            let tolerancia = 1.0; // Aumentado para permitir rellenar mejor los huecos
 
-            for(let t of tareasHoy) {
+            for(let t of tareasDisponibles) {
                 let esCronos = t.linea.toUpperCase().includes('CRONOS');
                 
                 if (esCronos && pctCronos === 0) continue; 
                 if (!esCronos && pctCronos === 100) continue; 
                 
                 if(t.esProd) {
-                    planActualVista.push(t);
+                    if (t.tocaHoy) planActualVista.push(t); // Solo agregamos AGVs si les toca, no los adelantamos a lo loco.
                     continue; 
                 }
 
@@ -584,6 +597,7 @@
                 }
 
                 if (entra) {
+                    if (!t.tocaHoy) t.esAdelanto = true; // Etiqueta a la tarea sacada del futuro
                     planActualVista.push(t);
                     if (esCronos) hC += t.duracion; else hK += t.duracion;
                     hTotal += t.duracion;
@@ -592,7 +606,7 @@
 
             tbody.innerHTML = '';
             if(planActualVista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold bg-gray-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Capacidad completa o línea bloqueada.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold bg-gray-50"><i class="fa-solid fa-mug-hot mr-2"></i> Turno limpio. Toda la planta está al día.</td></tr>';
                 return;
             }
 
@@ -606,12 +620,13 @@
                 else if (t.esCritica && (t.diasPasados !== 999)) reproTag = `<span class="ml-2 text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded uppercase font-bold animate-pulse"><i class="fa-solid fa-triangle-exclamation"></i> Crítica</span>`;
                 else if (t.esFijadaHoy) reproTag = `<span class="ml-2 text-[10px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded uppercase font-bold">Agrupada</span>`;
                 else if (t.esRepro) reproTag = `<span class="ml-2 text-[10px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded uppercase font-bold">Reprogramada</span>`;
+                else if (t.esAdelanto) reproTag = `<span class="ml-2 text-[10px] bg-cyan-100 text-cyan-800 px-1 py-0.5 rounded uppercase font-bold"><i class="fa-solid fa-forward-step mr-1"></i> Adelanto</span>`;
                 
                 let duracionVisual = t.esProd ? `<span class="text-emerald-600 font-bold"><i class="fa-solid fa-bolt mr-1"></i>0 hs</span>` : `${t.duracion} hs`;
 
                 let botonesAccion = esHoy ? `
                     <button onclick="marcarCumplida('${t.id}', this)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click">Cumplida</button>
-                    <button onclick="cambiarTarea('${t.id}')" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click" title="Ocultar de hoy y traer otra de la lista"><i class="fa-solid fa-rotate mr-1"></i> Rotar</button>
+                    <button onclick="cambiarTarea('${t.id}')" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click" title="Ocultar por hoy"><i class="fa-solid fa-rotate mr-1"></i> Rotar</button>
                     <button onclick="marcarReprogramada('${t.id}', this)" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold shadow-sm btn-click">Patear a Mañana</button>
                 ` : `<span class="text-xs text-gray-400 font-bold"><i class="fa-solid fa-lock mr-1"></i> Solo editable en (Hoy)</span>`;
 
@@ -629,8 +644,14 @@
             });
         }
 
+        // Graba el ID rotado en la fecha actual para que no se borre al moverse
         function cambiarTarea(id) {
-            tareasOmitidasHoy.push(id);
+            if (!tareasOmitidasPorDia[fechaSimulada]) {
+                tareasOmitidasPorDia[fechaSimulada] = [];
+            }
+            if (!tareasOmitidasPorDia[fechaSimulada].includes(id)) {
+                tareasOmitidasPorDia[fechaSimulada].push(id);
+            }
             animarRecalculo();
         }
 
