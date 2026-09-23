@@ -35,22 +35,34 @@
             <button onclick="switchTab('config')" id="tab-config" class="tab-inactive py-4">Configuración y Reglas</button>
         </div>
 
-        <!-- PESTAÑA 1 -->
+        <!-- PESTAÑA 1: DASHBOARD -->
         <div id="view-dashboard" class="p-6 space-y-6">
             <div class="flex space-x-2 border-b pb-4" id="botonesDias"></div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100 items-end">
+            <!-- PANEL DE CONGELAMIENTO (Se muestra si el plan está guardado) -->
+            <div id="panelCongelado" class="hidden bg-emerald-50 border border-emerald-200 p-4 rounded-lg flex justify-between items-center shadow-sm">
+                <span class="text-emerald-800 font-bold"><i class="fa-solid fa-lock mr-2"></i> Este plan fue guardado y está bloqueado para protegerlo.</span>
+                <button onclick="descongelarPlan()" class="bg-white border border-emerald-300 px-4 py-2 rounded text-sm text-emerald-700 font-bold hover:bg-emerald-100 btn-click shadow-sm">
+                    <i class="fa-solid fa-unlock mr-1"></i> Desbloquear y Recalcular
+                </button>
+            </div>
+
+            <!-- CONTROLES NORMALES -->
+            <div id="panelControles" class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100 items-end">
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 uppercase">Capacidad Base (Hs)</label>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Capacidad (Hs)</label>
                     <input type="number" id="inputHoras" value="8" class="mt-1 block w-full rounded border-gray-300 p-2 text-sm shadow-sm" onchange="animarRecalculo()">
                 </div>
-                <div class="col-span-1">
+                <div class="col-span-1 md:col-span-2">
                     <label class="block text-xs font-bold text-gray-500 uppercase">Mezcla: <span id="labelMezcla" class="text-blue-700">50% Cronos / 50% KP1</span></label>
                     <input type="range" id="sliderMezcla" min="0" max="100" value="50" class="mt-3 w-full cursor-pointer" oninput="actualizarLabelMezcla(); animarRecalculo();">
                 </div>
-                <div>
-                    <button id="btnRecalcular" onclick="animarRecalculo()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded shadow-sm btn-click transition-colors">
-                        <i class="fa-solid fa-rotate mr-2"></i> Recalcular Turno
+                <div class="flex space-x-2">
+                    <button id="btnRecalcular" onclick="animarRecalculo()" class="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-2 rounded shadow-sm btn-click text-xs">
+                        <i class="fa-solid fa-rotate"></i> Recalcular
+                    </button>
+                    <button onclick="congelarPlan()" class="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-2 rounded shadow-sm btn-click text-xs">
+                        <i class="fa-solid fa-floppy-disk"></i> Guardar Plan
                     </button>
                 </div>
             </div>
@@ -58,7 +70,7 @@
             <div>
                 <div class="flex justify-between items-end mb-3">
                     <div>
-                        <h3 class="font-bold text-gray-700 inline-block">Listado de Tareas del Día</h3>
+                        <h3 class="font-bold text-gray-700 inline-block">Listado de Tareas</h3>
                         <span id="horasUsadas" class="ml-3 text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">Cargando...</span>
                     </div>
                     <button onclick="copiarParteDiario(this)" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded text-xs font-bold shadow-sm btn-click transition flex items-center">
@@ -83,16 +95,13 @@
             </div>
         </div>
 
-        <!-- PESTAÑA 2 -->
+        <!-- PESTAÑA 2: MATRIZ -->
         <div id="view-auditoria" class="hidden p-6 space-y-6">
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h2 class="text-lg font-bold text-gray-800">Matriz de Cumplimiento (Mes en Curso)</h2>
                     <p class="text-sm text-gray-500">Registro histórico sincronizado en tiempo real.</p>
                 </div>
-                <button onclick="exportarReporte()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-bold shadow-sm btn-click">
-                    <i class="fa-solid fa-file-excel mr-2"></i> Exportar a Excel
-                </button>
             </div>
             <div class="overflow-x-auto border rounded-lg max-h-[500px]">
                 <table class="w-full text-left text-sm border-collapse">
@@ -102,29 +111,40 @@
             </div>
         </div>
 
-        <!-- PESTAÑA 3 -->
+        <!-- PESTAÑA 3: CONFIGURACIÓN -->
         <div id="view-config" class="hidden p-6 space-y-6">
-            
             <div class="bg-white border rounded-lg shadow-sm p-6 border-l-4 border-l-indigo-500">
-                <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-clock-rotate-left mr-2 text-indigo-600"></i> Carga Manual (Fuera de Plan)</h3>
+                <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-layer-group mr-2 text-indigo-600"></i> Reglas de Agrupamiento y Anclaje</h3>
+                <p class="text-xs text-gray-500 mb-4">Avisale a la app qué palabras clave (ej: "M1") deben hacerse todas juntas de forma indivisible.</p>
+                
                 <div class="flex space-x-2">
-                    <select id="selectManual" class="border rounded p-2 text-sm w-full shadow-sm bg-white"></select>
-                    <input type="date" id="fechaManual" class="border rounded p-2 text-sm w-48 shadow-sm">
-                    <button onclick="guardarRegistroManual()" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-indigo-700 btn-click">Registrar</button>
+                    <input type="text" id="nuevoGrupo" placeholder="Palabra clave..." class="border rounded p-2 text-sm w-48 shadow-sm">
+                    <select id="diaGrupo" class="border rounded p-2 text-sm w-56 shadow-sm bg-white">
+                        <option value="">Agrupar cualquier día</option>
+                        <option value="1">Forzar los Lunes</option>
+                        <option value="2">Forzar los Martes</option>
+                        <option value="3">Forzar los Miércoles</option>
+                        <option value="4">Forzar los Jueves</option>
+                        <option value="5">Forzar los Viernes</option>
+                    </select>
+                    <button onclick="agregarGrupo()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-900 shadow-sm btn-click font-bold">Guardar Regla</button>
                 </div>
-                <p id="msgManual" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Guardado!</p>
+                
+                <div class="flex items-center mt-3 bg-gray-50 p-2 rounded border w-fit">
+                    <input type="checkbox" id="checkProduccion" class="mr-2 h-4 w-4 text-blue-600 rounded border-gray-300">
+                    <label for="checkProduccion" class="text-xs text-gray-700 font-medium cursor-pointer">
+                        Esta tarea se hace durante la <span class="font-bold text-emerald-600">Producción</span> (0 horas)
+                    </label>
+                </div>
+
+                <ul id="listaGrupos" class="mt-4 text-sm text-gray-600 space-y-2"></ul>
             </div>
 
             <div class="bg-white border rounded-lg shadow-sm p-6">
-                <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-database mr-2 text-blue-600"></i> Estado de la Base Maestra</h3>
-                <div id="infoBase" class="text-sm font-medium text-gray-600 bg-gray-50 p-4 rounded border mb-4">
-                    <i class="fa-solid fa-spinner fa-spin mr-2"></i> Sincronizando...
-                </div>
-                <div class="border-t pt-4">
-                    <h4 class="font-bold text-gray-700 text-sm mb-1">Actualizar Base (Matriz Calendario)</h4>
-                    <input type="file" id="fileImport" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
-                    <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada perfectamente!</p>
-                </div>
+                <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-database mr-2 text-blue-600"></i> Base Maestra (Actualizar Excel)</h3>
+                <p class="text-xs text-gray-500 mb-4">Subí el Excel actualizado para que la app lea los "Realizado" en la matriz de fechas.</p>
+                <input type="file" id="fileImport" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+                <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada!</p>
             </div>
         </div>
     </div>
@@ -144,15 +164,19 @@
         const db = firebase.database();
 
         let baseTareas = [];
+        let reglasGrupos = [];
         let historialLT = {}; 
         let reprogramadasLT = {};
+        
+        let ajustesDiarios = {}; // Acá se guardan las tareas rotadas en la nube
+        let planesGuardados = {}; // Acá se guardan los planes congelados en la nube
         
         let fechaSimulada = getFechaHoy(); 
         let planActualVista = []; 
         let currentTab = 'dashboard';
-        let tareasOmitidasPorDia = {}; 
 
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+        const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes"};
 
         function generarIdTarea(linea, maquina, actividad) {
             let str = linea + "_" + maquina + "_" + actividad;
@@ -164,6 +188,13 @@
             baseTareas = data.baseTareas || [];
             historialLT = data.historialLT || {};
             reprogramadasLT = data.reprogramadasLT || {};
+            ajustesDiarios = data.ajustesDiarios || {};
+            planesGuardados = data.planesGuardados || {};
+            
+            // LA PURGA DE REGLAS FANTASMAS (Evita que desaparezcan)
+            let reglasCrudas = data.reglasGrupos || [];
+            let tempReglas = Array.isArray(reglasCrudas) ? reglasCrudas : Object.values(reglasCrudas);
+            reglasGrupos = tempReglas.filter(g => g && g.keyword);
             
             let badgeNube = document.getElementById('status-nube');
             if(badgeNube) {
@@ -171,26 +202,9 @@
                 badgeNube.innerHTML = '<i class="fa-solid fa-cloud-check mr-1"></i> Sincronizado';
             }
 
-            let infoBase = document.getElementById('infoBase');
-            if(infoBase) {
-                if(baseTareas.length > 0) {
-                    infoBase.innerHTML = `<span class="text-green-600 font-bold"><i class="fa-solid fa-check-circle mr-1"></i> Base Activa:</span> ${baseTareas.length} tareas cargadas.`;
-                    infoBase.className = "text-sm font-medium text-gray-700 bg-green-50 p-4 rounded border border-green-200 mb-4";
-                    
-                    let selectManual = document.getElementById('selectManual');
-                    if (selectManual) {
-                        let options = '<option value="">Seleccionar tarea...</option>';
-                        let baseOrdenada = [...baseTareas].sort((a,b) => a.maquina.localeCompare(b.maquina));
-                        baseOrdenada.forEach(t => { options += `<option value="${t.id}">${t.linea} | ${t.maquina}</option>`; });
-                        selectManual.innerHTML = options;
-                    }
-                } else {
-                    infoBase.innerHTML = `<span class="text-amber-600 font-bold"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Base Vacía</span>`;
-                    infoBase.className = "text-sm font-medium text-gray-700 bg-amber-50 p-4 rounded border border-amber-200 mb-4";
-                }
-            }
             if(currentTab === 'dashboard') recalcularPlan();
             if(currentTab === 'auditoria') generarMatrizMes();
+            if(currentTab === 'config') renderizarGrupos();
         });
 
         function switchTab(tab) {
@@ -205,27 +219,12 @@
 
             if(tab === 'auditoria') generarMatrizMes();
             if(tab === 'dashboard') { fechaSimulada = getFechaHoy(); renderizarBotonesDias(); }
-            if(tab === 'config') {
-                let tzoffset = (new Date()).getTimezoneOffset() * 60000;
-                let ayerObj = new Date(Date.now() - tzoffset - 86400000); 
-                if(document.getElementById('fechaManual')) document.getElementById('fechaManual').value = ayerObj.toISOString().split('T')[0];
-            }
-        }
-
-        function guardarRegistroManual() {
-            let id = document.getElementById('selectManual').value;
-            let fecha = document.getElementById('fechaManual').value;
-            if (!id || !fecha) return;
-            db.ref('lt_data/historialLT/' + id).set(fecha).then(() => {
-                db.ref('lt_data/reprogramadasLT/' + id).remove(); 
-                let msg = document.getElementById('msgManual');
-                msg.classList.remove('hidden'); setTimeout(() => msg.classList.add('hidden'), 3000);
-            });
+            if(tab === 'config') { renderizarGrupos(); }
         }
 
         function actualizarLabelMezcla() {
             let val = document.getElementById('sliderMezcla').value;
-            document.getElementById('labelMezcla').innerText = `${val}% Cronos / ${100 - val}% KP1`;
+            document.getElementById('labelMezcla').innerText = `${val}\% Cronos / ${100 - val}% KP1`;
         }
 
         function getFechaHoy() {
@@ -254,9 +253,24 @@
             recalcularPlan();
         }
 
-        function seleccionarDia(dateStr) { fechaSimulada = dateStr; renderizarBotonesDias(); }
+        function seleccionarDia(dateStr) { 
+            fechaSimulada = dateStr; 
+            renderizarBotonesDias(); 
+        }
 
-        // EXCEL PARSER (Lee fechas directo de fila 0)
+        function congelarPlan() {
+            if (planActualVista.length === 0) return alert("No hay tareas para guardar.");
+            let planObj = {};
+            planActualVista.forEach(t => planObj[t.id] = true);
+            db.ref('lt_data/planesGuardados/' + fechaSimulada).set(planObj);
+            animarRecalculo();
+        }
+
+        function descongelarPlan() {
+            db.ref('lt_data/planesGuardados/' + fechaSimulada).remove();
+            animarRecalculo();
+        }
+
         let fileInput = document.getElementById('fileImport');
         if(fileInput) {
             fileInput.addEventListener('change', function(e) {
@@ -267,12 +281,9 @@
                     let wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', cellDates: true});
                     let sheet = wb.Sheets[wb.SheetNames[0]];
                     let json = XLSX.utils.sheet_to_json(sheet, {header: 1});
-                    
                     if(json.length < 3) return;
 
-                    let dateRow = 0;
-                    let headerRow = 1;
-
+                    let dateRow = 0, headerRow = 1;
                     let headers = json[headerRow].map(h => String(h || "").toLowerCase().trim());
                     let cLin = headers.findIndex(h => h.includes('linea') || h.includes('línea'));
                     let cMaq = headers.findIndex(h => h.includes('zona') || h.includes('maquina'));
@@ -300,8 +311,7 @@
                             return `${y}-${m}-${d}`;
                         }
                         if(typeof excelDate === 'string') {
-                            let txt = excelDate.trim();
-                            let match = txt.match(/(\d{4})-(\d{2})-(\d{2})/);
+                            let match = excelDate.match(/(\d{4})-(\d{2})-(\d{2})/);
                             if(match) return match[0];
                         }
                         return null;
@@ -309,7 +319,6 @@
 
                     for(let i = headerRow + 1; i < json.length; i++) { 
                         if(!json[i] || json[i].length === 0) continue; 
-                        
                         let valLinea = String(json[i][cLin] || "").trim();
                         if(!valLinea || valLinea.toLowerCase() === 'linea') continue;
 
@@ -329,12 +338,18 @@
                         for (let col = maxCols - 1; col > cFre; col--) {
                             let celdaEstado = String(json[i][col] || "").trim().toLowerCase();
                             if (celdaEstado === 'realizado' || celdaEstado === 'ok' || celdaEstado === 'hecho' || celdaEstado === 'x') {
-                                let fechaArriba = json[dateRow][col];
-                                ultimaFechaValida = parseExcelDateEx(fechaArriba);
+                                for (let c = col; c >= cFre; c--) { 
+                                    for (let r = headerRow; r >= 0; r--) { 
+                                        if (json[r] && json[r][c]) {
+                                            let parsed = parseExcelDateEx(json[r][c]);
+                                            if (parsed) { ultimaFechaValida = parsed; break; }
+                                        }
+                                    }
+                                    if (ultimaFechaValida) break;
+                                }
                                 if (ultimaFechaValida) break; 
                             }
                         }
-
                         if (ultimaFechaValida) {
                             nuevoHistorial[idFijo] = ultimaFechaValida;
                             delete reprogramadasLT[idFijo];
@@ -342,7 +357,6 @@
                             delete nuevoHistorial[idFijo];
                         }
                     }
-                    
                     document.getElementById('statusImport').classList.remove('hidden');
                     db.ref('lt_data/baseTareas').set(nuevasTareas);
                     db.ref('lt_data/historialLT').set(nuevoHistorial).then(() => {
@@ -358,7 +372,7 @@
             document.getElementById('tablaTareas').style.opacity = '0.5';
             setTimeout(() => {
                 recalcularPlan();
-                document.getElementById('btnRecalcular').innerHTML = '<i class="fa-solid fa-rotate mr-2"></i> Recalcular Turno';
+                document.getElementById('btnRecalcular').innerHTML = '<i class="fa-solid fa-rotate mr-2"></i> Recalcular';
                 document.getElementById('tablaTareas').style.opacity = '1';
             }, 300); 
         }
@@ -366,6 +380,9 @@
         function recalcularPlan() {
             let tbody = document.getElementById('tablaTareas');
             let lblHoras = document.getElementById('horasUsadas');
+            let pCongelado = document.getElementById('panelCongelado');
+            let pControles = document.getElementById('panelControles');
+
             if(!tbody) return;
             if(!baseTareas || baseTareas.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500">Sin datos. Subí tu Excel.</td></tr>';
@@ -374,10 +391,13 @@
 
             let capHoras = parseFloat(document.getElementById('inputHoras').value) || 8;
             let pctCronos = parseInt(document.getElementById('sliderMezcla').value);
-            
+            let maxCronos = capHoras * (pctCronos / 100);
+            let maxKP1 = capHoras * ((100 - pctCronos) / 100);
+
             let [y, m, d] = fechaSimulada.split('-');
-            
-            // 1. Preparación de Tareas y Grupos
+            let diaSemanaSimulado = new Date(y, m-1, d).getDay();
+
+            // 1. EVALUAR ESTADO DE TAREAS Y AUTO-DETECTAR GRUPOS
             let tareasEvaluadas = baseTareas.map(t => {
                 let ultVez = historialLT[t.id];
                 let movidaPara = reprogramadasLT[t.id];
@@ -386,22 +406,43 @@
                 let tocaHoy = (movidaPara === fechaSimulada) || (diasPasados >= t.frecuencia);
                 if(ultVez && ultVez >= fechaSimulada) tocaHoy = false;
 
-                // Detector Automático de Grupos M
+                // Autodetección: Si dice (M1), crea el grupo GRP_M1
                 let descGrupo = (t.maquina + " " + t.actividad).toUpperCase();
                 let matchG = descGrupo.match(/\(M\d+\)/);
-                let grupoId = matchG ? matchG[0] : null; 
+                let autoGrupoId = matchG ? matchG[0].replace(/[\(\)]/g, '') : null; 
                 let esAGVKP1 = descGrupo.includes("AGV") && t.linea.toUpperCase().includes("KP1");
 
-                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esProd: esAGVKP1, grupoId: grupoId};
+                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esProd: esAGVKP1, grupoId: autoGrupoId, esFijadaHoy: false};
             });
 
-            // 2. Unificar Urgencia de los Grupos y Sumar sus horas
+            // 2. APLICAR REGLAS MANUALES DE CONFIGURACIÓN
+            for(let regla of reglasGrupos) {
+                let keyword = regla.keyword.toUpperCase();
+                let diaRequerido = regla.diaSemana !== "" ? parseInt(regla.diaSemana) : null;
+                
+                let filtradas = tareasEvaluadas.filter(t => (t.maquina + " " + t.actividad).toUpperCase().includes(keyword));
+                if(filtradas.length === 0) continue;
+
+                let diaValido = (diaRequerido === null) || (diaSemanaSimulado === diaRequerido);
+                if(diaValido) {
+                    if(filtradas.some(t => t.tocaHoy)) {
+                        filtradas.forEach(t => {
+                            t.tocaHoy = true; t.esFijadaHoy = true; t.grupoId = keyword;
+                            if(regla.esProd) t.esProd = true;
+                        });
+                    }
+                } else {
+                    filtradas.forEach(t => t.tocaHoy = false);
+                }
+            }
+
+            // 3. AUTO-SINCRONIZAR GRUPOS (Si a uno le toca, a todos les toca)
             let statsGrupo = {};
             tareasEvaluadas.forEach(t => {
                 if(t.grupoId && !t.esProd) {
                     if(!statsGrupo[t.grupoId]) statsGrupo[t.grupoId] = { maxDias: -1, tocaHoy: false, duracionSum: 0 };
                     if(t.diasPasados > statsGrupo[t.grupoId].maxDias) statsGrupo[t.grupoId].maxDias = t.diasPasados;
-                    if(t.tocaHoy) statsGrupo[t.grupoId].tocaHoy = true;
+                    if(t.tocaHoy || t.esFijadaHoy) statsGrupo[t.grupoId].tocaHoy = true;
                     statsGrupo[t.grupoId].duracionSum += t.duracion;
                 }
             });
@@ -409,85 +450,95 @@
             tareasEvaluadas.forEach(t => {
                 if(t.grupoId && !t.esProd) {
                     t.diasPasados = statsGrupo[t.grupoId].maxDias;
-                    t.tocaHoy = statsGrupo[t.grupoId].tocaHoy;
+                    if (statsGrupo[t.grupoId].tocaHoy) { t.tocaHoy = true; t.esFijadaHoy = true; }
                 }
             });
 
-            let omitidas = tareasOmitidasPorDia[fechaSimulada] || [];
-            let disponibles = tareasEvaluadas.filter(t => !omitidas.includes(t.id));
-
-            // Orden Prioritario
-            disponibles.sort((a, b) => {
-                if(a.esProd && !b.esProd) return -1;
-                if(!a.esProd && b.esProd) return 1;
-                if(a.tocaHoy && !b.tocaHoy) return -1;
-                if(!a.tocaHoy && b.tocaHoy) return 1;
-                let ratioA = a.diasPasados / a.frecuencia;
-                let ratioB = b.diasPasados / b.frecuencia;
-                return ratioB - ratioA; 
-            });
-
+            // VERIFICAR SI EL DÍA ESTÁ CONGELADO / GUARDADO
+            let planCongelado = planesGuardados[fechaSimulada];
             planActualVista = [];
             let hTotal = 0;
-            let tolerancia = 1.0; 
-            
-            let gruposAceptados = new Set();
-            let gruposRechazados = new Set();
 
-            // 3. LA EVALUACIÓN ESTRICTA (Grupo vs Capacidad)
-            for(let t of disponibles) {
-                let esCronos = t.linea.toUpperCase().includes('CRONOS');
+            if (planCongelado) {
+                // RENDER MODO CONGELADO (Muestra exacto lo que se guardó)
+                pCongelado.classList.remove('hidden');
+                pControles.classList.add('hidden');
                 
-                // VETO DEL SLIDER
-                if (esCronos && pctCronos === 0) continue; 
-                if (!esCronos && pctCronos === 100) continue; 
-                
-                if(t.esProd) {
-                    if (t.tocaHoy) planActualVista.push(t);
-                    continue; 
-                }
+                planActualVista = tareasEvaluadas.filter(t => planCongelado[t.id]);
+                planActualVista.forEach(t => { if(!t.esProd) hTotal += t.duracion; });
 
-                let entra = false;
-                
-                if (t.grupoId) {
-                    if (gruposRechazados.has(t.grupoId)) continue; // Si el grupo ya fue rechazado, salteamos la tarea
+            } else {
+                // RENDER MODO LIBRE (Aplica algoritmo Tetris)
+                pCongelado.classList.add('hidden');
+                pControles.classList.remove('hidden');
+
+                let omitidasNube = ajustesDiarios[fechaSimulada] || {};
+                let disponibles = tareasEvaluadas.filter(t => !omitidasNube[t.id] && !(t.grupoId && omitidasNube['GRP_' + t.grupoId]));
+
+                disponibles.sort((a, b) => {
+                    if(a.esProd && !b.esProd) return -1; if(!a.esProd && b.esProd) return 1;
+                    if(a.tocaHoy && !b.tocaHoy) return -1; if(!a.tocaHoy && b.tocaHoy) return 1;
+                    let ratioA = a.diasPasados / a.frecuencia; let ratioB = b.diasPasados / b.frecuencia;
+                    return ratioB - ratioA; 
+                });
+
+                let hC = 0, hK = 0;
+                let gruposAceptados = new Set();
+                let gruposRechazados = new Set();
+
+                // LÓGICA ESTRICTA DE HORAS PARA GRUPOS
+                for(let t of disponibles) {
+                    let esCronos = t.linea.toUpperCase().includes('CRONOS');
                     
-                    if (gruposAceptados.has(t.grupoId)) {
-                        entra = true; // Si el grupo fue aceptado, entra seguro
-                    } else {
-                        // Es la primera tarea del grupo que evaluamos. ¿Entra todo el grupo?
-                        let durGrupoCompleto = statsGrupo[t.grupoId].duracionSum;
+                    if (esCronos && pctCronos === 0) continue; 
+                    if (!esCronos && pctCronos === 100) continue; 
+                    
+                    if(t.esProd) {
+                        if (t.tocaHoy) planActualVista.push(t);
+                        continue; 
+                    }
+
+                    let entra = false;
+                    
+                    if (t.grupoId) {
+                        if (gruposRechazados.has(t.grupoId)) continue; 
                         
-                        // Entra si el día está vacío (para no trabar grupos inmensos) o si hay horas suficientes
-                        if (hTotal === 0 || (hTotal + durGrupoCompleto <= capHoras + tolerancia)) {
-                            gruposAceptados.add(t.grupoId);
-                            entra = true;
+                        if (gruposAceptados.has(t.grupoId)) {
+                            entra = true; 
                         } else {
-                            gruposRechazados.add(t.grupoId);
-                            continue; // Grupo rechazado, queda para mañana.
+                            let durGrupoCompleto = statsGrupo[t.grupoId].duracionSum;
+                            
+                            // EXCEPCIÓN DE 8 HORAS: Si el grupo entero cabe, entra. O si es lo PRIMERO que metemos en el día.
+                            if (hTotal === 0 || (hTotal + durGrupoCompleto <= capHoras + 0.5)) {
+                                gruposAceptados.add(t.grupoId); entra = true;
+                            } else {
+                                gruposRechazados.add(t.grupoId); continue; 
+                            }
+                        }
+                    } else {
+                        if (esCronos) {
+                            if (hC + t.duracion <= maxCronos + 0.5 && hTotal + t.duracion <= capHoras + 0.5) entra = true;
+                        } else {
+                            if (hK + t.duracion <= maxKP1 + 0.5 && hTotal + t.duracion <= capHoras + 0.5) entra = true;
                         }
                     }
-                } else {
-                    // Tareas individuales
-                    if (hTotal + t.duracion <= capHoras + tolerancia) {
-                        entra = true;
-                    }
-                }
 
-                if (entra) {
-                    planActualVista.push(t);
-                    hTotal += t.duracion;
+                    if (entra) {
+                        if (!t.tocaHoy && !t.esFijadaHoy) t.esAdelanto = true; 
+                        planActualVista.push(t);
+                        if (esCronos) hC += t.duracion; else hK += t.duracion;
+                        hTotal += t.duracion;
+                    }
                 }
             }
 
             if (lblHoras) {
-                if (hTotal > capHoras) lblHoras.innerHTML = `Consumo: <span class="text-amber-600 font-bold">${hTotal} hs</span> (Excede capacidad permitida)`;
-                else lblHoras.innerHTML = `Consumo: <span class="text-green-600 font-bold">${hTotal} / ${capHoras} hs</span>`;
+                lblHoras.innerHTML = `Consumo: <span class="${hTotal > capHoras ? 'text-red-600' : 'text-green-600'} font-bold">${hTotal} /${capHoras} hs</span>`;
             }
 
             tbody.innerHTML = '';
             if(planActualVista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold">Turno limpio. Toda la planta está al día.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold">Sin tareas. Todo al día.</td></tr>';
                 return;
             }
 
@@ -495,31 +546,44 @@
                 let badgeLinea = t.linea.toUpperCase().includes('KP1') ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800';
                 
                 let reproTag = '';
-                if (t.esProd) reproTag = `<span class="ml-2 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-bold"><i class="fa-solid fa-bolt"></i> Producción</span>`;
-                else if (t.grupoId) reproTag = `<span class="ml-2 text-[10px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded font-bold">GRUPO ${t.grupoId}</span>`;
-                else if (t.esRepro) reproTag = `<span class="ml-2 text-[10px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded font-bold">Reprogramada</span>`;
+                if (t.esProd) reproTag = `<span class="ml-2 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-bold"><i class="fa-solid fa-bolt"></i> Prod</span>`;
+                else if (t.grupoId) reproTag = `<span class="ml-2 text-[10px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded font-bold">GRP ${t.grupoId}</span>`;
+                else if (t.esRepro) reproTag = `<span class="ml-2 text-[10px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded font-bold">Pateada</span>`;
+                else if (t.esAdelanto) reproTag = `<span class="ml-2 text-[10px] bg-cyan-100 text-cyan-800 px-1 py-0.5 rounded font-bold">Adelanto</span>`;
                 
-                let duracionVisual = t.esProd ? `<span class="text-emerald-600 font-bold"><i class="fa-solid fa-bolt mr-1"></i>0 hs</span>` : `${t.duracion} hs`;
+                let durVisual = t.esProd ? `<span class="text-emerald-600 font-bold">0 hs</span>` : `${t.duracion} hs`;
 
-                let botones = (fechaSimulada === getFechaHoy()) ? `
-                    <button onclick="marcarCumplida('${t.id}', this)" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold btn-click">Cumplida</button>
-                    <button onclick="cambiarTarea('${t.id}')" class="bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded text-xs font-bold btn-click"><i class="fa-solid fa-rotate"></i> Rotar</button>
-                    <button onclick="marcarReprogramada('${t.id}', this)" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold btn-click">Patear</button>
-                ` : `<span class="text-xs text-gray-400 font-bold"><i class="fa-solid fa-lock"></i> Solo editable en Hoy</span>`;
+                // AHORA PODÉS MARCAR CUMPLIDA CUALQUIER DÍA SIN RESTRICCIÓN DE "HOY"
+                let btnRotarHTML = planCongelado ? `` : `<button onclick="cambiarTarea('${t.id}', '${t.grupoId || ''}')" class="bg-indigo-100 text-indigo-700 px-2 py-1.5 rounded text-xs font-bold btn-click"><i class="fa-solid fa-rotate"></i> Rotar</button>`;
+                
+                let botones = `
+                    <button onclick="marcarCumplida('${t.id}', this)" class="bg-green-600 text-white px-2 py-1.5 rounded text-xs font-bold btn-click">Cumplida</button>
+                    ${btnRotarHTML}
+                    <button onclick="marcarReprogramada('${t.id}', this)" class="bg-gray-200 text-gray-700 px-2 py-1.5 rounded text-xs font-bold btn-click">Patear</button>
+                `;
+
+                // Si ya fue cumplida en esta fecha (revisando el historial real)
+                if (historialLT[t.id] === fechaSimulada) {
+                    botones = `<span class="text-green-700 bg-green-50 px-3 py-1 rounded text-xs font-bold border"><i class="fa-solid fa-check"></i> Lista</span>`;
+                }
 
                 tbody.innerHTML += `
                     <tr class="hover:bg-gray-50 border-b">
-                        <td class="p-3 font-medium text-gray-800">${t.maquina} ${reproTag}<br><span class="text-xs text-gray-500 font-normal">${t.actividad}</span></td>
+                        <td class="p-3 font-medium text-gray-800">${t.maquina}${reproTag}<br><span class="text-xs text-gray-500 font-normal">${t.actividad}</span></td>
                         <td class="p-3"><span class="px-2 py-1 rounded text-xs font-bold ${badgeLinea}">${t.linea}</span></td>
-                        <td class="p-3 text-gray-600 font-medium">${duracionVisual}</td>
-                        <td class="p-3 text-right space-x-2">${botones}</td>
+                        <td class="p-3 text-gray-600 font-medium">${durVisual}</td>
+                        <td class="p-3 text-right space-x-1">${botones}</td>
                     </tr>`;
             });
         }
 
-        function cambiarTarea(id) {
-            if(!tareasOmitidasPorDia[fechaSimulada]) tareasOmitidasPorDia[fechaSimulada] = [];
-            tareasOmitidasPorDia[fechaSimulada].push(id);
+        function cambiarTarea(id, grupoId) {
+            let omitidasNube = ajustesDiarios[fechaSimulada] || {};
+            omitidasNube[id] = true;
+            // SI ROTÁS UNA, ROTAN TODAS SUS HERMANAS DE GRUPO JUNTAS.
+            if (grupoId && grupoId !== 'null') omitidasNube['GRP_' + grupoId] = true; 
+            
+            db.ref('lt_data/ajustesDiarios/' + fechaSimulada).set(omitidasNube);
             animarRecalculo();
         }
 
@@ -533,13 +597,15 @@
         }
 
         function marcarCumplida(id, btn) {
-            btn.parentElement.innerHTML = `<span class="text-green-700 bg-green-50 px-3 py-1.5 rounded text-xs font-bold border"><i class="fa-solid fa-check"></i> Cumplida</span>`;
-            db.ref('lt_data/historialLT/' + id).set(getFechaHoy());
+            btn.parentElement.innerHTML = `<span class="text-green-700 bg-green-50 px-3 py-1 rounded text-xs font-bold border"><i class="fa-solid fa-check"></i> Lista</span>`;
+            // IMPORTANTE: Se graba la fecha que estés mirando en la pestaña, NO la fecha real del reloj.
+            db.ref('lt_data/historialLT/' + id).set(fechaSimulada);
             db.ref('lt_data/reprogramadasLT/' + id).remove();
         }
         function marcarReprogramada(id, btn) {
-            let obj = new Date(); obj.setDate(obj.getDate() + 1); if(obj.getDay() === 6) obj.setDate(obj.getDate() + 2);
-            btn.parentElement.innerHTML = `<span class="text-blue-700 bg-blue-50 px-3 py-1.5 rounded text-xs font-bold border">Reprogramada</span>`;
+            let [y, m, d] = fechaSimulada.split('-'); let obj = new Date(y, m-1, d);
+            obj.setDate(obj.getDate() + 1); if(obj.getDay() === 6) obj.setDate(obj.getDate() + 2);
+            btn.parentElement.innerHTML = `<span class="text-blue-700 bg-blue-50 px-3 py-1 rounded text-xs font-bold border">Reprogramada</span>`;
             db.ref('lt_data/reprogramadasLT/' + id).set(obj.toISOString().split('T')[0]);
         }
 
@@ -552,7 +618,7 @@
             document.getElementById('headAuditoria').innerHTML = th + "</tr>";
             let tb = '';
             baseTareas.forEach(t => {
-                tb += `<tr><td class="p-2 border sticky left-0 bg-white z-10 text-xs"><span class="text-blue-600 font-bold">${t.linea}</span> | ${t.maquina}</td>`;
+                tb += `<tr><td class="p-2 border sticky left-0 bg-white z-10 text-xs"><span class="text-blue-600 font-bold">${t.linea}</span> \vert{}${t.maquina}</td>`;
                 for(let i=1; i<=dias; i++) {
                     let dStr = `${y}-${m}-${String(i).padStart(2,'0')}`;
                     let ok = (historialLT[t.id] === dStr) ? '<i class="fa-solid fa-check text-green-500"></i>' : '';
@@ -563,8 +629,35 @@
             tbody.innerHTML = tb;
         }
 
-        function exportarReporte() {}
-        renderizarBotonesDias();
+        function agregarGrupo() {
+            let txt = document.getElementById('nuevoGrupo').value.trim();
+            let dia = document.getElementById('diaGrupo').value;
+            let esProd = document.getElementById('checkProduccion').checked;
+            
+            if(txt) {
+                let nuevasReglas = [...reglasGrupos, { keyword: txt, diaSemana: dia, esProd: esProd }];
+                db.ref('lt_data/reglasGrupos').set(nuevasReglas);
+                document.getElementById('nuevoGrupo').value = ''; document.getElementById('checkProduccion').checked = false;
+            }
+        }
+
+        function eliminarGrupo(idx) {
+            let nuevasReglas = [...reglasGrupos]; nuevasReglas.splice(idx, 1);
+            db.ref('lt_data/reglasGrupos').set(nuevasReglas);
+        }
+
+        function renderizarGrupos() {
+            let lista = document.getElementById('listaGrupos');
+            if(!lista) return;
+            lista.innerHTML = reglasGrupos.map((g, i) => {
+                let infoDia = g.diaSemana ? `<span class="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded font-bold ml-2">Forzado: ${diasMapa[g.diaSemana]}</span>` : ``;
+                let infoProd = g.esProd ? `<span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded font-bold ml-2"><i class="fa-solid fa-bolt mr-1"></i> Prod</span>` : ``;
+                return `<li class="flex items-center p-2 bg-gray-50 border rounded w-fit mb-2">
+                    <span class="font-medium text-gray-700">Regla: "${g.keyword}"</span> ${infoDia} ${infoProd}
+                    <button onclick="eliminarGrupo(${i})" class="text-red-500 font-bold ml-3 text-sm btn-click"><i class="fa-solid fa-trash"></i></button>
+                </li>`;
+            }).join('');
+        }
     </script>
 </body>
 </html>
