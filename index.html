@@ -35,11 +35,10 @@
             <button onclick="switchTab('config')" id="tab-config" class="tab-inactive py-4">Configuración y Reglas</button>
         </div>
 
-        <!-- PESTAÑA 1: DASHBOARD -->
+        <!-- PESTAÑA 1 -->
         <div id="view-dashboard" class="p-6 space-y-6">
-            <div class="flex space-x-2 border-b pb-4" id="botonesDias"></div>
+            <div class="flex space-x-2 border-b pb-4 overflow-x-auto" id="botonesDias"></div>
 
-            <!-- PANEL DE CONGELAMIENTO (Se muestra si el plan está guardado) -->
             <div id="panelCongelado" class="hidden bg-emerald-50 border border-emerald-200 p-4 rounded-lg flex justify-between items-center shadow-sm">
                 <span class="text-emerald-800 font-bold"><i class="fa-solid fa-lock mr-2"></i> Este plan fue guardado y está bloqueado para protegerlo.</span>
                 <button onclick="descongelarPlan()" class="bg-white border border-emerald-300 px-4 py-2 rounded text-sm text-emerald-700 font-bold hover:bg-emerald-100 btn-click shadow-sm">
@@ -47,7 +46,6 @@
                 </button>
             </div>
 
-            <!-- CONTROLES NORMALES -->
             <div id="panelControles" class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100 items-end">
                 <div>
                     <label class="block text-xs font-bold text-gray-500 uppercase">Capacidad (Hs)</label>
@@ -95,13 +93,16 @@
             </div>
         </div>
 
-        <!-- PESTAÑA 2: MATRIZ -->
+        <!-- PESTAÑA 2 -->
         <div id="view-auditoria" class="hidden p-6 space-y-6">
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h2 class="text-lg font-bold text-gray-800">Matriz de Cumplimiento (Mes en Curso)</h2>
                     <p class="text-sm text-gray-500">Registro histórico sincronizado en tiempo real.</p>
                 </div>
+                <button onclick="exportarReporte()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-bold shadow-sm btn-click">
+                    <i class="fa-solid fa-file-excel mr-2"></i> Exportar a Excel
+                </button>
             </div>
             <div class="overflow-x-auto border rounded-lg max-h-[500px]">
                 <table class="w-full text-left text-sm border-collapse">
@@ -111,11 +112,11 @@
             </div>
         </div>
 
-        <!-- PESTAÑA 3: CONFIGURACIÓN -->
+        <!-- PESTAÑA 3 -->
         <div id="view-config" class="hidden p-6 space-y-6">
             <div class="bg-white border rounded-lg shadow-sm p-6 border-l-4 border-l-indigo-500">
                 <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-layer-group mr-2 text-indigo-600"></i> Reglas de Agrupamiento y Anclaje</h3>
-                <p class="text-xs text-gray-500 mb-4">Avisale a la app qué palabras clave (ej: "M1") deben hacerse todas juntas de forma indivisible.</p>
+                <p class="text-xs text-gray-500 mb-4">Las tareas con (M1), (M2), etc. se agrupan SOLAS. Acá podés sumar reglas extra si necesitás.</p>
                 
                 <div class="flex space-x-2">
                     <input type="text" id="nuevoGrupo" placeholder="Palabra clave..." class="border rounded p-2 text-sm w-48 shadow-sm">
@@ -126,6 +127,8 @@
                         <option value="3">Forzar los Miércoles</option>
                         <option value="4">Forzar los Jueves</option>
                         <option value="5">Forzar los Viernes</option>
+                        <option value="6">Forzar los Sábados</option>
+                        <option value="0">Forzar los Domingos</option>
                     </select>
                     <button onclick="agregarGrupo()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-900 shadow-sm btn-click font-bold">Guardar Regla</button>
                 </div>
@@ -141,10 +144,25 @@
             </div>
 
             <div class="bg-white border rounded-lg shadow-sm p-6">
+                <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-clock-rotate-left mr-2 text-indigo-600"></i> Carga Manual (Fuera de Plan)</h3>
+                <div class="flex space-x-2">
+                    <select id="selectManual" class="border rounded p-2 text-sm w-full shadow-sm bg-white"></select>
+                    <input type="date" id="fechaManual" class="border rounded p-2 text-sm w-48 shadow-sm">
+                    <button onclick="guardarRegistroManual()" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-indigo-700 btn-click">Registrar</button>
+                </div>
+                <p id="msgManual" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Guardado!</p>
+            </div>
+
+            <div class="bg-white border rounded-lg shadow-sm p-6">
                 <h3 class="font-bold text-gray-800 mb-2"><i class="fa-solid fa-database mr-2 text-blue-600"></i> Base Maestra (Actualizar Excel)</h3>
-                <p class="text-xs text-gray-500 mb-4">Subí el Excel actualizado para que la app lea los "Realizado" en la matriz de fechas.</p>
-                <input type="file" id="fileImport" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
-                <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada!</p>
+                <div id="infoBase" class="text-sm font-medium text-gray-600 bg-gray-50 p-4 rounded border mb-4">
+                    <i class="fa-solid fa-spinner fa-spin mr-2"></i> Sincronizando...
+                </div>
+                <div class="border-t pt-4">
+                    <h4 class="font-bold text-gray-700 text-sm mb-1">Actualizar Base (Matriz Calendario)</h4>
+                    <input type="file" id="fileImport" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+                    <p id="statusImport" class="text-xs text-green-600 mt-2 font-bold hidden"><i class="fa-solid fa-check mr-1"></i> ¡Base actualizada perfectamente!</p>
+                </div>
             </div>
         </div>
     </div>
@@ -168,15 +186,15 @@
         let historialLT = {}; 
         let reprogramadasLT = {};
         
-        let ajustesDiarios = {}; // Acá se guardan las tareas rotadas en la nube
-        let planesGuardados = {}; // Acá se guardan los planes congelados en la nube
+        let ajustesDiarios = {}; 
+        let planesGuardados = {}; 
         
         let fechaSimulada = getFechaHoy(); 
         let planActualVista = []; 
         let currentTab = 'dashboard';
 
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-        const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes"};
+        const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes", "6": "Sábado", "0": "Domingo"};
 
         function generarIdTarea(linea, maquina, actividad) {
             let str = linea + "_" + maquina + "_" + actividad;
@@ -191,7 +209,6 @@
             ajustesDiarios = data.ajustesDiarios || {};
             planesGuardados = data.planesGuardados || {};
             
-            // LA PURGA DE REGLAS FANTASMAS (Evita que desaparezcan)
             let reglasCrudas = data.reglasGrupos || [];
             let tempReglas = Array.isArray(reglasCrudas) ? reglasCrudas : Object.values(reglasCrudas);
             reglasGrupos = tempReglas.filter(g => g && g.keyword);
@@ -202,6 +219,24 @@
                 badgeNube.innerHTML = '<i class="fa-solid fa-cloud-check mr-1"></i> Sincronizado';
             }
 
+            let infoBase = document.getElementById('infoBase');
+            if(infoBase) {
+                if(baseTareas.length > 0) {
+                    infoBase.innerHTML = `<span class="text-green-600 font-bold"><i class="fa-solid fa-check-circle mr-1"></i> Base Activa:</span> ${baseTareas.length} tareas cargadas.`;
+                    infoBase.className = "text-sm font-medium text-gray-700 bg-green-50 p-4 rounded border border-green-200 mb-4";
+                    
+                    let selectManual = document.getElementById('selectManual');
+                    if (selectManual) {
+                        let options = '<option value="">Seleccionar tarea...</option>';
+                        let baseOrdenada = [...baseTareas].sort((a,b) => a.maquina.localeCompare(b.maquina));
+                        baseOrdenada.forEach(t => { options += `<option value="${t.id}">${t.linea} \vert{}${t.maquina}</option>`; });
+                        selectManual.innerHTML = options;
+                    }
+                } else {
+                    infoBase.innerHTML = `<span class="text-amber-600 font-bold"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Base Vacía</span>`;
+                    infoBase.className = "text-sm font-medium text-gray-700 bg-amber-50 p-4 rounded border border-amber-200 mb-4";
+                }
+            }
             if(currentTab === 'dashboard') recalcularPlan();
             if(currentTab === 'auditoria') generarMatrizMes();
             if(currentTab === 'config') renderizarGrupos();
@@ -219,7 +254,23 @@
 
             if(tab === 'auditoria') generarMatrizMes();
             if(tab === 'dashboard') { fechaSimulada = getFechaHoy(); renderizarBotonesDias(); }
-            if(tab === 'config') { renderizarGrupos(); }
+            if(tab === 'config') {
+                renderizarGrupos();
+                let tzoffset = (new Date()).getTimezoneOffset() * 60000;
+                let ayerObj = new Date(Date.now() - tzoffset - 86400000); 
+                if(document.getElementById('fechaManual')) document.getElementById('fechaManual').value = ayerObj.toISOString().split('T')[0];
+            }
+        }
+
+        function guardarRegistroManual() {
+            let id = document.getElementById('selectManual').value;
+            let fecha = document.getElementById('fechaManual').value;
+            if (!id || !fecha) return;
+            db.ref('lt_data/historialLT/' + id).set(fecha).then(() => {
+                db.ref('lt_data/reprogramadasLT/' + id).remove(); 
+                let msg = document.getElementById('msgManual');
+                msg.classList.remove('hidden'); setTimeout(() => msg.classList.add('hidden'), 3000);
+            });
         }
 
         function actualizarLabelMezcla() {
@@ -232,22 +283,24 @@
             return (new Date(Date.now() - tzoffset)).toISOString().split('T')[0];
         }
 
+        // ---------- RENDER DE TODOS LOS DÍAS DE LA SEMANA ----------
         function renderizarBotonesDias() {
             let hoyStr = getFechaHoy();
             let [y, m, d] = hoyStr.split('-');
             let hoyObj = new Date(y, m-1, d);
             let diaActual = hoyObj.getDay(); 
-            let diff = hoyObj.getDate() - diaActual + (diaActual === 0 ? -6 : 1);
+            let diff = hoyObj.getDate() - diaActual + (diaActual === 0 ? -6 : 1); // Calcula el Lunes
             let lunes = new Date(hoyObj.setDate(diff));
 
             let html = "";
-            for(let i = 0; i < 5; i++) {
+            // Bucle ajustado a 7 para que muestre de Lunes a Domingo
+            for(let i = 0; i < 7; i++) {
                 let iterDate = new Date(lunes);
                 iterDate.setDate(lunes.getDate() + i);
                 let dateStr = iterDate.toISOString().split('T')[0];
                 let btnClass = (dateStr === fechaSimulada) ? 'day-active' : 'day-inactive';
                 let indicator = (dateStr === hoyStr) ? ' (Hoy)' : '';
-                html += `<button onclick="seleccionarDia('${dateStr}')" class="px-4 py-2 text-sm rounded border ${btnClass} shadow-sm transition btn-click">${diasSemana[iterDate.getDay()]}${indicator}</button>`;
+                html += `<button onclick="seleccionarDia('${dateStr}')" class="px-4 py-2 text-sm rounded border ${btnClass} shadow-sm transition btn-click whitespace-nowrap">${diasSemana[iterDate.getDay()]}${indicator}</button>`;
             }
             document.getElementById('botonesDias').innerHTML = html;
             recalcularPlan();
@@ -368,11 +421,12 @@
         }
 
         function animarRecalculo() {
-            document.getElementById('btnRecalcular').innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando...';
+            let b = document.getElementById('btnRecalcular');
+            if(b) b.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando...';
             document.getElementById('tablaTareas').style.opacity = '0.5';
             setTimeout(() => {
                 recalcularPlan();
-                document.getElementById('btnRecalcular').innerHTML = '<i class="fa-solid fa-rotate mr-2"></i> Recalcular';
+                if(b) b.innerHTML = '<i class="fa-solid fa-rotate mr-2"></i> Recalcular';
                 document.getElementById('tablaTareas').style.opacity = '1';
             }, 300); 
         }
@@ -397,7 +451,6 @@
             let [y, m, d] = fechaSimulada.split('-');
             let diaSemanaSimulado = new Date(y, m-1, d).getDay();
 
-            // 1. EVALUAR ESTADO DE TAREAS Y AUTO-DETECTAR GRUPOS
             let tareasEvaluadas = baseTareas.map(t => {
                 let ultVez = historialLT[t.id];
                 let movidaPara = reprogramadasLT[t.id];
@@ -406,7 +459,6 @@
                 let tocaHoy = (movidaPara === fechaSimulada) || (diasPasados >= t.frecuencia);
                 if(ultVez && ultVez >= fechaSimulada) tocaHoy = false;
 
-                // Autodetección: Si dice (M1), crea el grupo GRP_M1
                 let descGrupo = (t.maquina + " " + t.actividad).toUpperCase();
                 let matchG = descGrupo.match(/\(M\d+\)/);
                 let autoGrupoId = matchG ? matchG[0].replace(/[\(\)]/g, '') : null; 
@@ -415,7 +467,6 @@
                 return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esProd: esAGVKP1, grupoId: autoGrupoId, esFijadaHoy: false};
             });
 
-            // 2. APLICAR REGLAS MANUALES DE CONFIGURACIÓN
             for(let regla of reglasGrupos) {
                 let keyword = regla.keyword.toUpperCase();
                 let diaRequerido = regla.diaSemana !== "" ? parseInt(regla.diaSemana) : null;
@@ -436,7 +487,6 @@
                 }
             }
 
-            // 3. AUTO-SINCRONIZAR GRUPOS (Si a uno le toca, a todos les toca)
             let statsGrupo = {};
             tareasEvaluadas.forEach(t => {
                 if(t.grupoId && !t.esProd) {
@@ -454,13 +504,11 @@
                 }
             });
 
-            // VERIFICAR SI EL DÍA ESTÁ CONGELADO / GUARDADO
             let planCongelado = planesGuardados[fechaSimulada];
             planActualVista = [];
             let hTotal = 0;
 
             if (planCongelado) {
-                // RENDER MODO CONGELADO (Muestra exacto lo que se guardó)
                 pCongelado.classList.remove('hidden');
                 pControles.classList.add('hidden');
                 
@@ -468,7 +516,6 @@
                 planActualVista.forEach(t => { if(!t.esProd) hTotal += t.duracion; });
 
             } else {
-                // RENDER MODO LIBRE (Aplica algoritmo Tetris)
                 pCongelado.classList.add('hidden');
                 pControles.classList.remove('hidden');
 
@@ -486,7 +533,6 @@
                 let gruposAceptados = new Set();
                 let gruposRechazados = new Set();
 
-                // LÓGICA ESTRICTA DE HORAS PARA GRUPOS
                 for(let t of disponibles) {
                     let esCronos = t.linea.toUpperCase().includes('CRONOS');
                     
@@ -507,8 +553,6 @@
                             entra = true; 
                         } else {
                             let durGrupoCompleto = statsGrupo[t.grupoId].duracionSum;
-                            
-                            // EXCEPCIÓN DE 8 HORAS: Si el grupo entero cabe, entra. O si es lo PRIMERO que metemos en el día.
                             if (hTotal === 0 || (hTotal + durGrupoCompleto <= capHoras + 0.5)) {
                                 gruposAceptados.add(t.grupoId); entra = true;
                             } else {
@@ -553,7 +597,6 @@
                 
                 let durVisual = t.esProd ? `<span class="text-emerald-600 font-bold">0 hs</span>` : `${t.duracion} hs`;
 
-                // AHORA PODÉS MARCAR CUMPLIDA CUALQUIER DÍA SIN RESTRICCIÓN DE "HOY"
                 let btnRotarHTML = planCongelado ? `` : `<button onclick="cambiarTarea('${t.id}', '${t.grupoId || ''}')" class="bg-indigo-100 text-indigo-700 px-2 py-1.5 rounded text-xs font-bold btn-click"><i class="fa-solid fa-rotate"></i> Rotar</button>`;
                 
                 let botones = `
@@ -562,7 +605,6 @@
                     <button onclick="marcarReprogramada('${t.id}', this)" class="bg-gray-200 text-gray-700 px-2 py-1.5 rounded text-xs font-bold btn-click">Patear</button>
                 `;
 
-                // Si ya fue cumplida en esta fecha (revisando el historial real)
                 if (historialLT[t.id] === fechaSimulada) {
                     botones = `<span class="text-green-700 bg-green-50 px-3 py-1 rounded text-xs font-bold border"><i class="fa-solid fa-check"></i> Lista</span>`;
                 }
@@ -580,9 +622,7 @@
         function cambiarTarea(id, grupoId) {
             let omitidasNube = ajustesDiarios[fechaSimulada] || {};
             omitidasNube[id] = true;
-            // SI ROTÁS UNA, ROTAN TODAS SUS HERMANAS DE GRUPO JUNTAS.
             if (grupoId && grupoId !== 'null') omitidasNube['GRP_' + grupoId] = true; 
-            
             db.ref('lt_data/ajustesDiarios/' + fechaSimulada).set(omitidasNube);
             animarRecalculo();
         }
@@ -598,7 +638,6 @@
 
         function marcarCumplida(id, btn) {
             btn.parentElement.innerHTML = `<span class="text-green-700 bg-green-50 px-3 py-1 rounded text-xs font-bold border"><i class="fa-solid fa-check"></i> Lista</span>`;
-            // IMPORTANTE: Se graba la fecha que estés mirando en la pestaña, NO la fecha real del reloj.
             db.ref('lt_data/historialLT/' + id).set(fechaSimulada);
             db.ref('lt_data/reprogramadasLT/' + id).remove();
         }
@@ -658,6 +697,9 @@
                 </li>`;
             }).join('');
         }
+        
+        // ¡ESTA ERA LA LÍNEA QUE FALTABA PARA QUE APAREZCAN LOS BOTONES!
+        renderizarBotonesDias();
     </script>
 </body>
 </html>
