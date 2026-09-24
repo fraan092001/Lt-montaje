@@ -207,9 +207,9 @@
             ajustesDiarios = data.ajustesDiarios || {};
             planesGuardados = data.planesGuardados || {};
             
-            // LA CORRECCIÓN: Le devolvemos a la app la lectura original de reglas para que no las borre.
             let reglasCrudas = data.reglasGrupos || [];
-            reglasGrupos = Array.isArray(reglasCrudas) ? reglasCrudas : Object.values(reglasCrudas);
+            let tempReglas = Array.isArray(reglasCrudas) ? reglasCrudas : Object.values(reglasCrudas);
+            reglasGrupos = tempReglas.filter(g => g && g.keyword);
             
             let badgeNube = document.getElementById('status-nube');
             if(badgeNube) {
@@ -290,7 +290,7 @@
             let lunes = new Date(hoyObj.setDate(diff));
 
             let html = "";
-            // VUELVE A ESTAR DE LUNES A VIERNES (5 DÍAS)
+            // SOLUCIONADO EL ERROR ESTÚPIDO: Vuelve a decir < 5 para mostrar solo de Lunes a Viernes
             for(let i = 0; i < 5; i++) {
                 let iterDate = new Date(lunes);
                 iterDate.setDate(lunes.getDate() + i);
@@ -709,7 +709,7 @@
             let lista = document.getElementById('listaGrupos');
             if(!lista) return;
             lista.innerHTML = reglasGrupos.map((g, i) => {
-                if(!g || !g.keyword) return ''; // <-- EVITA CRASHEOS CON HUECOS VACÍOS
+                if(!g || !g.keyword) return ''; 
                 let infoDia = g.diaSemana ? `<span class="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded font-bold ml-2">Forzado: ${diasMapa[g.diaSemana]}</span>` : `<span class="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded ml-2">Agrupado (Sin día fijo)</span>`;
                 let infoProd = g.esProd ? `<span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded font-bold ml-2"><i class="fa-solid fa-bolt mr-1"></i> Prod</span>` : ``;
                 return `<li class="flex items-center p-2 bg-gray-50 border rounded w-fit mb-2">
