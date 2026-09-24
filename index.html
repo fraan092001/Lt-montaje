@@ -127,8 +127,6 @@
                         <option value="3">Forzar los Miércoles</option>
                         <option value="4">Forzar los Jueves</option>
                         <option value="5">Forzar los Viernes</option>
-                        <option value="6">Forzar los Sábados</option>
-                        <option value="0">Forzar los Domingos</option>
                     </select>
                     <button onclick="agregarGrupo()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-900 shadow-sm btn-click font-bold">Guardar Regla</button>
                 </div>
@@ -140,6 +138,7 @@
                     </label>
                 </div>
 
+                <!-- ACÁ VUELVEN A APARECER TUS REGLAS -->
                 <ul id="listaGrupos" class="mt-4 text-sm text-gray-600 space-y-2"></ul>
             </div>
 
@@ -193,7 +192,7 @@
         let currentTab = 'dashboard';
 
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-        const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes", "6": "Sábado", "0": "Domingo"};
+        const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes"};
 
         function generarIdTarea(linea, maquina, actividad) {
             let str = linea + "_" + maquina + "_" + actividad;
@@ -208,9 +207,9 @@
             ajustesDiarios = data.ajustesDiarios || {};
             planesGuardados = data.planesGuardados || {};
             
+            // LA CORRECCIÓN: Le devolvemos a la app la lectura original de reglas para que no las borre.
             let reglasCrudas = data.reglasGrupos || [];
-            let tempReglas = Array.isArray(reglasCrudas) ? reglasCrudas : Object.values(reglasCrudas);
-            reglasGrupos = tempReglas.filter(g => g && g.keyword);
+            reglasGrupos = Array.isArray(reglasCrudas) ? reglasCrudas : Object.values(reglasCrudas);
             
             let badgeNube = document.getElementById('status-nube');
             if(badgeNube) {
@@ -291,7 +290,8 @@
             let lunes = new Date(hoyObj.setDate(diff));
 
             let html = "";
-            for(let i = 0; i < 7; i++) {
+            // VUELVE A ESTAR DE LUNES A VIERNES (5 DÍAS)
+            for(let i = 0; i < 5; i++) {
                 let iterDate = new Date(lunes);
                 iterDate.setDate(lunes.getDate() + i);
                 let dateStr = iterDate.toISOString().split('T')[0];
@@ -465,6 +465,7 @@
             });
 
             for(let regla of reglasGrupos) {
+                if(!regla || !regla.keyword) continue;
                 let keyword = regla.keyword.toUpperCase();
                 let diaRequerido = regla.diaSemana !== "" ? parseInt(regla.diaSemana) : null;
                 
@@ -530,11 +531,8 @@
                 let gruposRechazados = new Set();
                 let pendientesRelleno = [];
 
-                // Función maestra para evaluar si una tarea cabe (Tolerancia 0.5hs)
                 function intentarMeter(t, respetarSlider) {
                     let esCronos = t.linea.toUpperCase().includes('CRONOS');
-                    
-                    // Si el slider está a 0% o 100%, es VETO ABSOLUTO de la línea
                     if (esCronos && pctCronos === 0) return false;
                     if (!esCronos && pctCronos === 100) return false;
 
@@ -543,11 +541,7 @@
                         if (gruposAceptados.has(t.grupoId)) return true;
                         
                         let durG = statsGrupo[t.grupoId].duracionSum;
-                        
-                        // Entra sin límite si es el ÚNICO y PRIMER grupo del día
-                        if (hTotal === 0) {
-                            gruposAceptados.add(t.grupoId); return true;
-                        }
+                        if (hTotal === 0) { gruposAceptados.add(t.grupoId); return true; }
                         
                         if (hTotal + durG <= capHoras + 0.5) {
                             if (respetarSlider) {
@@ -589,11 +583,9 @@
 
                 // PASADA 2 (RELLENO INTELIGENTE): Si faltan horas, el Slider cede sus restricciones
                 if (hTotal < capHoras - 0.1) {
-                    gruposRechazados.clear(); // Limpiamos rechazos porque ahora entra la flexibilidad
-                    
+                    gruposRechazados.clear(); 
                     for(let t of pendientesRelleno) {
                         if (hTotal >= capHoras) break;
-                        
                         if (intentarMeter(t, false)) {
                             if (!t.tocaHoy && !t.esFijadaHoy) t.esAdelanto = true; 
                             planActualVista.push(t);
@@ -717,7 +709,8 @@
             let lista = document.getElementById('listaGrupos');
             if(!lista) return;
             lista.innerHTML = reglasGrupos.map((g, i) => {
-                let infoDia = g.diaSemana ? `<span class="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded font-bold ml-2">Forzado: ${diasMapa[g.diaSemana]}</span>` : ``;
+                if(!g || !g.keyword) return ''; // <-- EVITA CRASHEOS CON HUECOS VACÍOS
+                let infoDia = g.diaSemana ? `<span class="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded font-bold ml-2">Forzado: ${diasMapa[g.diaSemana]}</span>` : `<span class="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded ml-2">Agrupado (Sin día fijo)</span>`;
                 let infoProd = g.esProd ? `<span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded font-bold ml-2"><i class="fa-solid fa-bolt mr-1"></i> Prod</span>` : ``;
                 return `<li class="flex items-center p-2 bg-gray-50 border rounded w-fit mb-2">
                     <span class="font-medium text-gray-700">Regla: "${g.keyword}"</span> ${infoDia} ${infoProd}
@@ -726,7 +719,6 @@
             }).join('');
         }
         
-        renderizarBotonesDias();
     </script>
 </body>
 </html>
