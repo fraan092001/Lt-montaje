@@ -48,7 +48,7 @@
 
             <div id="panelControles" class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100 items-end">
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 uppercase">Capacidad (Hs)</label>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Capacidad Base (Hs)</label>
                     <input type="number" id="inputHoras" value="8" class="mt-1 block w-full rounded border-gray-300 p-2 text-sm shadow-sm" onchange="animarRecalculo()">
                 </div>
                 <div class="col-span-1 md:col-span-2">
@@ -185,7 +185,6 @@
         let reglasGrupos = [];
         let historialLT = {}; 
         let reprogramadasLT = {};
-        
         let ajustesDiarios = {}; 
         let planesGuardados = {}; 
         
@@ -283,17 +282,15 @@
             return (new Date(Date.now() - tzoffset)).toISOString().split('T')[0];
         }
 
-        // ---------- RENDER DE TODOS LOS DÍAS DE LA SEMANA ----------
         function renderizarBotonesDias() {
             let hoyStr = getFechaHoy();
             let [y, m, d] = hoyStr.split('-');
             let hoyObj = new Date(y, m-1, d);
             let diaActual = hoyObj.getDay(); 
-            let diff = hoyObj.getDate() - diaActual + (diaActual === 0 ? -6 : 1); // Calcula el Lunes
+            let diff = hoyObj.getDate() - diaActual + (diaActual === 0 ? -6 : 1);
             let lunes = new Date(hoyObj.setDate(diff));
 
             let html = "";
-            // Bucle ajustado a 7 para que muestre de Lunes a Domingo
             for(let i = 0; i < 7; i++) {
                 let iterDate = new Date(lunes);
                 iterDate.setDate(lunes.getDate() + i);
@@ -464,7 +461,7 @@
                 let autoGrupoId = matchG ? matchG[0].replace(/[\(\)]/g, '') : null; 
                 let esAGVKP1 = descGrupo.includes("AGV") && t.linea.toUpperCase().includes("KP1");
 
-                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esProd: esAGVKP1, grupoId: autoGrupoId, esFijadaHoy: false};
+                return {...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esProd: esAGVKP1, grupoId: autoGrupoId, esFijadaHoy: false, esAdelanto: false};
             });
 
             for(let regla of reglasGrupos) {
@@ -511,7 +508,6 @@
             if (planCongelado) {
                 pCongelado.classList.remove('hidden');
                 pControles.classList.add('hidden');
-                
                 planActualVista = tareasEvaluadas.filter(t => planCongelado[t.id]);
                 planActualVista.forEach(t => { if(!t.esProd) hTotal += t.duracion; });
 
@@ -532,52 +528,84 @@
                 let hC = 0, hK = 0;
                 let gruposAceptados = new Set();
                 let gruposRechazados = new Set();
+                let pendientesRelleno = [];
 
-                for(let t of disponibles) {
+                // Función maestra para evaluar si una tarea cabe (Tolerancia 0.5hs)
+                function intentarMeter(t, respetarSlider) {
                     let esCronos = t.linea.toUpperCase().includes('CRONOS');
                     
-                    if (esCronos && pctCronos === 0) continue; 
-                    if (!esCronos && pctCronos === 100) continue; 
-                    
+                    // Si el slider está a 0% o 100%, es VETO ABSOLUTO de la línea
+                    if (esCronos && pctCronos === 0) return false;
+                    if (!esCronos && pctCronos === 100) return false;
+
+                    if (t.grupoId) {
+                        if (gruposRechazados.has(t.grupoId)) return false;
+                        if (gruposAceptados.has(t.grupoId)) return true;
+                        
+                        let durG = statsGrupo[t.grupoId].duracionSum;
+                        
+                        // Entra sin límite si es el ÚNICO y PRIMER grupo del día
+                        if (hTotal === 0) {
+                            gruposAceptados.add(t.grupoId); return true;
+                        }
+                        
+                        if (hTotal + durG <= capHoras + 0.5) {
+                            if (respetarSlider) {
+                                if (esCronos && hC + durG > maxCronos + 0.5) { gruposRechazados.add(t.grupoId); return false; }
+                                if (!esCronos && hK + durG > maxKP1 + 0.5) { gruposRechazados.add(t.grupoId); return false; }
+                            }
+                            gruposAceptados.add(t.grupoId); return true;
+                        } else {
+                            gruposRechazados.add(t.grupoId); return false;
+                        }
+                    } else {
+                        if (hTotal + t.duracion <= capHoras + 0.5) {
+                            if (respetarSlider) {
+                                if (esCronos && hC + t.duracion > maxCronos + 0.5) return false;
+                                if (!esCronos && hK + t.duracion > maxKP1 + 0.5) return false;
+                            }
+                            return true;
+                        }
+                        return false;
+                    }
+                }
+
+                // PASADA 1: Respetando el Slider estrictamente
+                for(let t of disponibles) {
                     if(t.esProd) {
                         if (t.tocaHoy) planActualVista.push(t);
                         continue; 
                     }
 
-                    let entra = false;
-                    
-                    if (t.grupoId) {
-                        if (gruposRechazados.has(t.grupoId)) continue; 
-                        
-                        if (gruposAceptados.has(t.grupoId)) {
-                            entra = true; 
-                        } else {
-                            let durGrupoCompleto = statsGrupo[t.grupoId].duracionSum;
-                            if (hTotal === 0 || (hTotal + durGrupoCompleto <= capHoras + 0.5)) {
-                                gruposAceptados.add(t.grupoId); entra = true;
-                            } else {
-                                gruposRechazados.add(t.grupoId); continue; 
-                            }
-                        }
-                    } else {
-                        if (esCronos) {
-                            if (hC + t.duracion <= maxCronos + 0.5 && hTotal + t.duracion <= capHoras + 0.5) entra = true;
-                        } else {
-                            if (hK + t.duracion <= maxKP1 + 0.5 && hTotal + t.duracion <= capHoras + 0.5) entra = true;
-                        }
-                    }
-
-                    if (entra) {
+                    if (intentarMeter(t, true)) {
                         if (!t.tocaHoy && !t.esFijadaHoy) t.esAdelanto = true; 
                         planActualVista.push(t);
-                        if (esCronos) hC += t.duracion; else hK += t.duracion;
+                        if (t.linea.toUpperCase().includes('CRONOS')) hC += t.duracion; else hK += t.duracion;
                         hTotal += t.duracion;
+                    } else {
+                        pendientesRelleno.push(t);
+                    }
+                }
+
+                // PASADA 2 (RELLENO INTELIGENTE): Si faltan horas, el Slider cede sus restricciones
+                if (hTotal < capHoras - 0.1) {
+                    gruposRechazados.clear(); // Limpiamos rechazos porque ahora entra la flexibilidad
+                    
+                    for(let t of pendientesRelleno) {
+                        if (hTotal >= capHoras) break;
+                        
+                        if (intentarMeter(t, false)) {
+                            if (!t.tocaHoy && !t.esFijadaHoy) t.esAdelanto = true; 
+                            planActualVista.push(t);
+                            if (t.linea.toUpperCase().includes('CRONOS')) hC += t.duracion; else hK += t.duracion;
+                            hTotal += t.duracion;
+                        }
                     }
                 }
             }
 
             if (lblHoras) {
-                lblHoras.innerHTML = `Consumo: <span class="${hTotal > capHoras ? 'text-red-600' : 'text-green-600'} font-bold">${hTotal} /${capHoras} hs</span>`;
+                lblHoras.innerHTML = `Consumo: <span class="${hTotal > capHoras ? 'text-red-600' : 'text-emerald-600'} font-bold">${hTotal} /${capHoras} hs</span>`;
             }
 
             tbody.innerHTML = '';
@@ -698,7 +726,6 @@
             }).join('');
         }
         
-        // ¡ESTA ERA LA LÍNEA QUE FALTABA PARA QUE APAREZCAN LOS BOTONES!
         renderizarBotonesDias();
     </script>
 </body>
