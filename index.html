@@ -50,7 +50,7 @@
 
             <div id="panelCongelado" class="hidden bg-emerald-50 border border-emerald-300 p-4 rounded-lg flex justify-between items-center shadow-sm">
                 <span class="text-emerald-800 font-bold flex items-center">
-                    <i class="fa-solid fa-lock mr-2 text-emerald-600 text-lg"></i> Este plan fue guardado y está bloqueado para protegerlo.
+                    <i class="fa-solid fa-lock mr-2 text-emerald-600 text-lg"></i> Este plan fue guardado y está bloqueado.
                 </span>
                 <button onclick="descongelarPlan()" class="bg-white border border-emerald-400 px-4 py-2 rounded-lg text-sm text-emerald-700 font-bold hover:bg-emerald-100 btn-click shadow-sm">
                     <i class="fa-solid fa-unlock mr-1.5"></i> Desbloquear y Modificar
@@ -67,7 +67,7 @@
                     <input type="range" id="sliderMezcla" min="0" max="100" value="50" class="mt-2 w-full cursor-pointer accent-blue-600" oninput="actualizarLabelMezcla(); animarRecalculo();">
                 </div>
                 <div class="flex space-x-2">
-                    <button onclick="restablecerSugerido()" class="w-1/2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-2 rounded-lg shadow-sm btn-click text-xs" title="Restablecer sugerencia inicial del sistema">
+                    <button onclick="restablecerSugerido()" class="w-1/2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-2 rounded-lg shadow-sm btn-click text-xs">
                         <i class="fa-solid fa-arrow-rotate-left mr-1"></i> Sugerir
                     </button>
                     <button onclick="congelarPlan()" class="w-1/2 bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 px-2 rounded-lg shadow-sm btn-click text-xs">
@@ -111,7 +111,6 @@
                         <h3 class="font-bold text-gray-800 text-base flex items-center">
                             <i class="fa-solid fa-boxes-stacked text-blue-600 mr-2"></i> Banco de Tareas Pendientes
                         </h3>
-                        <p class="text-xs text-gray-500">Buscá y sumá tareas adicionales al plan si contás con tiempo o recursos disponibles.</p>
                     </div>
                     <div class="w-full sm:w-72">
                         <input type="text" id="filtroBanco" placeholder="🔍 Buscar máquina o actividad..." class="w-full border border-gray-300 rounded-lg p-2 text-xs shadow-sm focus:ring-2 focus:ring-blue-500" onkeyup="renderizarBanco()">
@@ -142,7 +141,6 @@
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h2 class="text-lg font-bold text-gray-800">Matriz de Cumplimiento (Mes en Curso)</h2>
-                    <p class="text-sm text-gray-500">Fila superior de días y columna de máquinas inmovilizadas para rápida lectura.</p>
                 </div>
                 <button onclick="exportarReporte()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm btn-click flex items-center">
                     <i class="fa-solid fa-file-excel mr-2"></i> Exportar a Excel
@@ -163,10 +161,10 @@
                 <h3 class="font-bold text-gray-800 text-base flex items-center">
                     <i class="fa-solid fa-layer-group mr-2 text-indigo-600"></i> Reglas de Agrupamiento y Anclaje
                 </h3>
-                <p class="text-xs text-gray-500">Las tareas con (M1), (M2), etc. se agrupan automáticamente. Podés crear reglas adicionales forzando días (Lunes a Viernes) o marcando tareas en producción (0hs).</p>
+                <p class="text-xs text-gray-500">Para agrupar máquinas distintas podés separarlas con comas (ej: "elevador, urea, robot 1").</p>
                 
                 <div class="flex flex-wrap gap-2 items-center">
-                    <input type="text" id="nuevoGrupo" placeholder="Palabra clave o código..." class="border rounded-lg p-2 text-sm w-48 shadow-sm">
+                    <input type="text" id="nuevoGrupo" placeholder="Palabra o palabras con coma..." class="border rounded-lg p-2 text-sm w-64 shadow-sm">
                     <select id="diaGrupo" class="border rounded-lg p-2 text-sm w-56 shadow-sm bg-white">
                         <option value="">Agrupar cualquier día</option>
                         <option value="1">Forzar los Lunes</option>
@@ -193,7 +191,6 @@
                 <h3 class="font-bold text-gray-800 text-base flex items-center">
                     <i class="fa-solid fa-clock-rotate-left mr-2 text-indigo-600"></i> Carga Manual (Registro Histórico)
                 </h3>
-                <p class="text-xs text-gray-500">Tipeá el nombre o código de la máquina para buscarla rápidamente en la lista completa sin tener que desplazarte manualmente.</p>
                 <div class="flex flex-col sm:flex-row gap-2">
                     <div class="relative w-full">
                         <input type="text" id="inputManualTask" list="listaTareasDatalist" placeholder="🔍 Tipeá o seleccioná máquina/actividad..." class="border border-gray-300 rounded-lg p-2 text-sm w-full shadow-sm bg-white focus:ring-2 focus:ring-blue-500">
@@ -250,6 +247,9 @@
 
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
         const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes"};
+
+        // CORRECCIÓN INICIO: Renderizamos los días apenas abre la app
+        renderizarBotonesDias();
 
         function limpiarTexto(str) {
             if (!str) return "";
@@ -381,7 +381,8 @@
                 let indicator = (dateStr === hoyStr) ? ' (Hoy)' : '';
                 html += `<button onclick="seleccionarDia('${dateStr}')" class="px-4 py-2 text-sm rounded-lg border ${btnClass} shadow-sm transition btn-click whitespace-nowrap font-medium">${diasSemana[iterDate.getDay()]}${indicator}</button>`;
             }
-            document.getElementById('botonesDias').innerHTML = html;
+            let contenedor = document.getElementById('botonesDias');
+            if(contenedor) contenedor.innerHTML = html;
             recalcularPlan();
         }
 
@@ -403,109 +404,12 @@
             animarRecalculo();
         }
 
-        // ARREGLO BOTON SUGERIR: Borra del DOM instantáneamente
         function restablecerSugerido() {
             if (ajustesDiarios[fechaSimulada]) {
                 delete ajustesDiarios[fechaSimulada];
             }
             db.ref('lt_data/ajustesDiarios/' + fechaSimulada).remove().then(() => {
                 animarRecalculo();
-            });
-        }
-
-        let fileInput = document.getElementById('fileImport');
-        if(fileInput) {
-            fileInput.addEventListener('change', function(e) {
-                let file = e.target.files[0];
-                if(!file) return;
-                let reader = new FileReader();
-                reader.onload = function(ev) {
-                    let wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', cellDates: true});
-                    let sheet = wb.Sheets[wb.SheetNames[0]];
-                    let json = XLSX.utils.sheet_to_json(sheet, {header: 1});
-                    if(json.length < 3) return;
-
-                    let headerRow = 1;
-                    let headers = json[headerRow].map(h => limpiarTexto(String(h || "")).toLowerCase());
-                    let cLin = headers.findIndex(h => h.includes('linea') || h.includes('línea'));
-                    let cMaq = headers.findIndex(h => h.includes('zona') || h.includes('maquina'));
-                    let cAct = headers.findIndex(h => h.includes('actividad') || h.includes('tarea'));
-                    let cDur = headers.findIndex(h => h.includes('tiempo') || h.includes('hs'));
-                    let cFre = headers.findIndex(h => h.includes('frecuencia') || h.includes('frec'));
-                    
-                    let nuevasTareas = [];
-                    let nuevoHistorial = { ...historialLT };
-
-                    function parseExcelDateEx(excelDate) {
-                        if(!excelDate) return null;
-                        if(excelDate instanceof Date) {
-                            let y = excelDate.getFullYear();
-                            let m = String(excelDate.getMonth() + 1).padStart(2, '0');
-                            let d = String(excelDate.getDate()).padStart(2, '0');
-                            return `${y}-${m}-${d}`;
-                        }
-                        if(typeof excelDate === 'number') {
-                            let jsDate = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
-                            jsDate.setMinutes(jsDate.getMinutes() + jsDate.getTimezoneOffset());
-                            let y = jsDate.getFullYear();
-                            let m = String(jsDate.getMonth() + 1).padStart(2, '0');
-                            let d = String(jsDate.getDate()).padStart(2, '0');
-                            return `${y}-${m}-${d}`;
-                        }
-                        if(typeof excelDate === 'string') {
-                            let match = excelDate.match(/(\d{4})-(\d{2})-(\d{2})/);
-                            if(match) return match[0];
-                        }
-                        return null;
-                    }
-
-                    for(let i = headerRow + 1; i < json.length; i++) { 
-                        if(!json[i] || json[i].length === 0) continue; 
-                        let valLinea = limpiarTexto(String(json[i][cLin] || ""));
-                        if(!valLinea || valLinea.toLowerCase() === 'linea') continue;
-
-                        let maquina = limpiarTexto(String(json[i][cMaq] || "-"));
-                        let actividad = limpiarTexto(String(json[i][cAct] || "-"));
-                        let idFijo = generarIdTarea(valLinea, maquina, actividad);
-                        let durStr = String(json[i][cDur] || '0.5').replace(',','.');
-                        
-                        nuevasTareas.push({
-                            id: idFijo, linea: valLinea, maquina: maquina, actividad: actividad, 
-                            duracion: parseFloat(durStr) || 0.5, frecuencia: parseInt(json[i][cFre]) || 7 
-                        });
-
-                        let ultimaFechaValida = null;
-                        let maxCols = Math.max(json[0].length, json[i].length);
-                        
-                        for (let col = maxCols - 1; col > cFre; col--) {
-                            let celdaEstado = limpiarTexto(String(json[i][col] || "")).toLowerCase();
-                            if (celdaEstado === 'realizado' || celdaEstado === 'ok' || celdaEstado === 'hecho' || celdaEstado === 'x') {
-                                for (let c = col; c >= cFre; c--) { 
-                                    for (let r = headerRow; r >= 0; r--) { 
-                                        if (json[r] && json[r][c]) {
-                                            let parsed = parseExcelDateEx(json[r][c]);
-                                            if (parsed) { ultimaFechaValida = parsed; break; }
-                                        }
-                                    }
-                                    if (ultimaFechaValida) break;
-                                }
-                                if (ultimaFechaValida) break; 
-                            }
-                        }
-                        if (ultimaFechaValida) {
-                            nuevoHistorial[idFijo] = ultimaFechaValida;
-                            delete reprogramadasLT[idFijo];
-                        } else {
-                            delete nuevoHistorial[idFijo];
-                        }
-                    }
-                    document.getElementById('statusImport').classList.remove('hidden');
-                    db.ref('lt_data/baseTareas').set(nuevasTareas);
-                    db.ref('lt_data/historialLT').set(nuevoHistorial).then(() => {
-                        setTimeout(() => { document.getElementById('statusImport').classList.add('hidden'); switchTab('dashboard'); }, 2000);
-                    });
-                };
-                reader.readAsArrayBuffer(file);
             });
         }
 
@@ -554,24 +458,38 @@
                 return { ...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esProd: esAGVKP1, grupoId: autoGrupoId, esFijadaHoy: false };
             });
 
+            // CORRECCIÓN REGLAS: Grupos por comas y asignación universal
             for(let regla of reglasGrupos) {
                 if(!regla || !regla.keyword) continue;
-                let keyword = regla.keyword.toUpperCase();
+                
+                // Dividimos por coma para buscar combinaciones (ej: elevador, urea, paletizada)
+                let keywords = regla.keyword.toUpperCase().split(',').map(k => k.trim()).filter(k => k !== '');
                 let diaRequerido = regla.diaSemana !== "" ? parseInt(regla.diaSemana) : null;
                 
-                let filtradas = tareasEvaluadas.filter(t => (t.maquina + " " + t.actividad).toUpperCase().includes(keyword));
+                let filtradas = tareasEvaluadas.filter(t => {
+                    let desc = (t.maquina + " " + t.actividad).toUpperCase();
+                    // Si la tarea coincide con AL MENOS UNA de las palabras clave separadas por coma, entra.
+                    return keywords.some(k => desc.includes(k));
+                });
+
                 if(filtradas.length === 0) continue;
 
                 let diaValido = (diaRequerido === null) || (diaSemanaSimulado === diaRequerido);
-                if(diaValido) {
-                    if(filtradas.some(t => t.tocaHoy)) {
-                        filtradas.forEach(t => {
-                            t.tocaHoy = true; t.esFijadaHoy = true; t.grupoId = keyword;
-                            if(regla.esProd) t.esProd = true;
-                        });
-                    }
-                } else {
-                    filtradas.forEach(t => t.tocaHoy = false);
+                
+                // ASIGNAR EL GRUPO SIEMPRE (aunque no toque hoy, así sale agrupado en el banco)
+                filtradas.forEach(t => {
+                    t.grupoId = regla.keyword;
+                    if(regla.esProd) t.esProd = true;
+                    // Si es un día forzado y NO es hoy, le apagamos el tocaHoy.
+                    if(!diaValido) t.tocaHoy = false;
+                });
+
+                // Si el día es válido y AL MENOS UNA tarea del grupo toca hoy, arrastra a todas
+                if(diaValido && filtradas.some(t => t.tocaHoy)) {
+                    filtradas.forEach(t => {
+                        t.tocaHoy = true; 
+                        t.esFijadaHoy = true; 
+                    });
                 }
             }
 
@@ -626,7 +544,6 @@
                 let hC = 0, hK = 0, hSugSum = 0;
 
                 for(let t of disponibles) {
-                    // Verificamos si la tarea o TODO SU GRUPO fue sacado/agregado a mano
                     let estadoAjuste = ajustesHoy[t.id];
                     if (t.grupoId && ajustesHoy['GRP_' + t.grupoId]) {
                         estadoAjuste = ajustesHoy['GRP_' + t.grupoId];
@@ -650,7 +567,6 @@
                         continue;
                     }
 
-                    // Motor de sugerencia inteligente para lo que no se tocó a mano
                     let entra = false;
                     if (t.grupoId) {
                         if (gruposRechazados.has(t.grupoId)) continue;
@@ -682,7 +598,6 @@
                     }
                 }
 
-                // Generar vistas finales
                 tareasEvaluadas.forEach(t => {
                     let estadoAjuste = ajustesHoy[t.id];
                     if (t.grupoId && ajustesHoy['GRP_' + t.grupoId]) estadoAjuste = ajustesHoy['GRP_' + t.grupoId];
@@ -793,7 +708,6 @@
             });
         }
 
-        // ARREGLO AGRUPAMIENTO: Agrega todo el grupo a ajustesDiarios
         function sacarDelPlan(id, grupoId) {
             if (!ajustesDiarios[fechaSimulada]) ajustesDiarios[fechaSimulada] = {};
             ajustesDiarios[fechaSimulada][id] = 'sacada';
