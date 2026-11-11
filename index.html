@@ -21,7 +21,6 @@
         .fade-in { animation: fadeIn 0.25s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Estilos para inmovilizar filas y columnas en la matriz del mes */
         .sticky-col { position: sticky; left: 0; z-index: 10; background-color: white; }
         .sticky-header { position: sticky; top: 0; z-index: 20; background-color: #f3f4f6; }
         .sticky-corner { position: sticky; top: 0; left: 0; z-index: 30; background-color: #f3f4f6; }
@@ -30,7 +29,6 @@
 <body class="bg-gray-100 text-gray-800 font-sans p-4 md:p-6">
     <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
         
-        <!-- ENCABEZADO PRINCIPAL -->
         <div class="bg-blue-900 text-white px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-2">
             <div class="font-bold text-lg flex items-center">
                 <i class="fa-solid fa-industry mr-3 text-blue-300 text-xl"></i> L.T. Montaje - Stellantis
@@ -40,19 +38,16 @@
             </div>
         </div>
 
-        <!-- SOLAPAS / NAVEGACIÓN -->
         <div class="flex space-x-6 px-6 border-b border-gray-200 bg-gray-50">
             <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-active py-4 text-sm sm:text-base">Dashboard Semanal</button>
             <button onclick="switchTab('auditoria')" id="tab-auditoria" class="tab-inactive py-4 text-sm sm:text-base">Matriz del Mes</button>
             <button onclick="switchTab('config')" id="tab-config" class="tab-inactive py-4 text-sm sm:text-base">Configuración y Reglas</button>
         </div>
 
-        <!-- PESTAÑA 1: DASHBOARD SEMANAL (PLANIFICADOR ASISTIDO) -->
+        <!-- PESTAÑA 1: DASHBOARD -->
         <div id="view-dashboard" class="p-6 space-y-6">
-            <!-- DÍAS DE LA SEMANA (LUNES A VIERNES STRICTO) -->
             <div class="flex space-x-2 border-b pb-4 overflow-x-auto" id="botonesDias"></div>
 
-            <!-- PANEL DE PLAN GUARDADO / BLOQUEADO -->
             <div id="panelCongelado" class="hidden bg-emerald-50 border border-emerald-300 p-4 rounded-lg flex justify-between items-center shadow-sm">
                 <span class="text-emerald-800 font-bold flex items-center">
                     <i class="fa-solid fa-lock mr-2 text-emerald-600 text-lg"></i> Este plan fue guardado y está bloqueado para protegerlo.
@@ -62,7 +57,6 @@
                 </button>
             </div>
 
-            <!-- CONTROLES DE CAPACIDAD Y MEZCLA -->
             <div id="panelControles" class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded-xl border border-blue-100 items-end shadow-sm">
                 <div>
                     <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Capacidad Turno (Hs)</label>
@@ -194,7 +188,7 @@
                 <ul id="listaGrupos" class="mt-4 text-sm text-gray-600 space-y-2"></ul>
             </div>
 
-            <!-- CARGA MANUAL CON TIPEADO Y DESPLEGABLE (DATALIST) -->
+            <!-- CARGA MANUAL -->
             <div class="bg-white border rounded-xl shadow-sm p-6 space-y-3">
                 <h3 class="font-bold text-gray-800 text-base flex items-center">
                     <i class="fa-solid fa-clock-rotate-left mr-2 text-indigo-600"></i> Carga Manual (Registro Histórico)
@@ -257,12 +251,11 @@
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
         const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes"};
 
-        // FUNCIÓN ASPIRADORA: LIMPIA BASURA COMO ert{} Y CARACTERES RAROS AL IMPORTAR O MOSTRAR
         function limpiarTexto(str) {
             if (!str) return "";
             return String(str)
                 .replace(/ert\{\}/g, '')
-                .replace(/\u25A1/g, '')
+                .replace(/□/g, '')
                 .replace(/\r?\n|\r/g, ' ')
                 .replace(/\s+/g, ' ')
                 .trim();
@@ -371,7 +364,6 @@
             return (new Date(Date.now() - tzoffset)).toISOString().split('T')[0];
         }
 
-        // DÍAS DE LUNES A VIERNES ÚNICAMENTE
         function renderizarBotonesDias() {
             let hoyStr = getFechaHoy();
             let [y, m, d] = hoyStr.split('-');
@@ -411,12 +403,16 @@
             animarRecalculo();
         }
 
+        // ARREGLO BOTON SUGERIR: Borra del DOM instantáneamente
         function restablecerSugerido() {
-            db.ref('lt_data/ajustesDiarios/' + fechaSimulada).remove();
-            animarRecalculo();
+            if (ajustesDiarios[fechaSimulada]) {
+                delete ajustesDiarios[fechaSimulada];
+            }
+            db.ref('lt_data/ajustesDiarios/' + fechaSimulada).remove().then(() => {
+                animarRecalculo();
+            });
         }
 
-        // IMPORTACIÓN DESDE EXCEL
         let fileInput = document.getElementById('fileImport');
         if(fileInput) {
             fileInput.addEventListener('change', function(e) {
@@ -522,7 +518,6 @@
             }, 200); 
         }
 
-        // MOTOR PLANIFICADOR ASISTIDO & BANCO DE PENDIENTES
         function recalcularPlan() {
             let tbody = document.getElementById('tablaTareas');
             let lblHoras = document.getElementById('horasUsadas');
@@ -556,15 +551,7 @@
                 let autoGrupoId = matchG ? matchG[0].replace(/[\(\)]/g, '') : null; 
                 let esAGVKP1 = descGrupo.includes("AGV") && t.linea.toUpperCase().includes("KP1");
 
-                return {
-                    ...t, 
-                    diasPasados, 
-                    tocaHoy, 
-                    esRepro: (movidaPara === fechaSimulada), 
-                    esProd: esAGVKP1, 
-                    grupoId: autoGrupoId, 
-                    esFijadaHoy: false
-                };
+                return { ...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esProd: esAGVKP1, grupoId: autoGrupoId, esFijadaHoy: false };
             });
 
             for(let regla of reglasGrupos) {
@@ -624,7 +611,6 @@
                 document.getElementById('seccionBanco').classList.remove('hidden');
 
                 let ajustesHoy = ajustesDiarios[fechaSimulada] || {};
-
                 let disponibles = [...tareasEvaluadas];
 
                 disponibles.sort((a, b) => {
@@ -635,32 +621,58 @@
                 });
 
                 let sugSet = new Set();
+                let gruposAceptados = new Set();
+                let gruposRechazados = new Set();
                 let hC = 0, hK = 0, hSugSum = 0;
 
                 for(let t of disponibles) {
-                    if (ajustesHoy[t.id] === 'sacada') continue; 
+                    // Verificamos si la tarea o TODO SU GRUPO fue sacado/agregado a mano
+                    let estadoAjuste = ajustesHoy[t.id];
+                    if (t.grupoId && ajustesHoy['GRP_' + t.grupoId]) {
+                        estadoAjuste = ajustesHoy['GRP_' + t.grupoId];
+                    }
+
+                    if (estadoAjuste === 'sacada') continue; 
 
                     let esCronos = t.linea.toUpperCase().includes('CRONOS');
                     if (esCronos && pctCronos === 0) continue;
                     if (!esCronos && pctCronos === 100) continue;
 
                     if (t.esProd) {
-                        if (t.tocaHoy || ajustesHoy[t.id] === 'agregada') sugSet.add(t.id);
+                        if (t.tocaHoy || estadoAjuste === 'agregada') sugSet.add(t.id);
                         continue;
                     }
 
-                    if (ajustesHoy[t.id] === 'agregada') {
+                    if (estadoAjuste === 'agregada') {
                         sugSet.add(t.id);
                         if (esCronos) hC += t.duracion; else hK += t.duracion;
                         hSugSum += t.duracion;
                         continue;
                     }
 
+                    // Motor de sugerencia inteligente para lo que no se tocó a mano
                     let entra = false;
-                    if (esCronos) {
-                        if (hC + t.duracion <= maxCronos + 0.5 && hSugSum + t.duracion <= capHoras + 0.5) entra = true;
+                    if (t.grupoId) {
+                        if (gruposRechazados.has(t.grupoId)) continue;
+                        if (gruposAceptados.has(t.grupoId)) {
+                            entra = true;
+                        } else {
+                            let durG = statsGrupo[t.grupoId].duracionSum;
+                            if (hSugSum === 0 || hSugSum + durG <= capHoras + 0.5) {
+                                if (esCronos && hC + durG > maxCronos + 0.5) { gruposRechazados.add(t.grupoId); continue; }
+                                if (!esCronos && hK + durG > maxKP1 + 0.5) { gruposRechazados.add(t.grupoId); continue; }
+                                gruposAceptados.add(t.grupoId);
+                                entra = true;
+                            } else {
+                                gruposRechazados.add(t.grupoId);
+                            }
+                        }
                     } else {
-                        if (hK + t.duracion <= maxKP1 + 0.5 && hSugSum + t.duracion <= capHoras + 0.5) entra = true;
+                        if (hSugSum + t.duracion <= capHoras + 0.5) {
+                            if (esCronos && hC + t.duracion > maxCronos + 0.5) continue;
+                            if (!esCronos && hK + t.duracion > maxKP1 + 0.5) continue;
+                            entra = true;
+                        }
                     }
 
                     if (entra) {
@@ -670,10 +682,14 @@
                     }
                 }
 
+                // Generar vistas finales
                 tareasEvaluadas.forEach(t => {
+                    let estadoAjuste = ajustesHoy[t.id];
+                    if (t.grupoId && ajustesHoy['GRP_' + t.grupoId]) estadoAjuste = ajustesHoy['GRP_' + t.grupoId];
+
                     let estaEnPlan = sugSet.has(t.id);
-                    if (ajustesHoy[t.id] === 'sacada') estaEnPlan = false;
-                    if (ajustesHoy[t.id] === 'agregada') estaEnPlan = true;
+                    if (estadoAjuste === 'sacada') estaEnPlan = false;
+                    if (estadoAjuste === 'agregada') estaEnPlan = true;
 
                     if (estaEnPlan) {
                         planActualVista.push(t);
@@ -697,10 +713,12 @@
                 planActualVista.forEach(t => {
                     let badgeLinea = t.linea.toUpperCase().includes('KP1') ? 'bg-indigo-100 text-indigo-800 border-indigo-200' : 'bg-blue-100 text-blue-800 border-blue-200';
                     let durVisual = t.esProd ? `<span class="text-emerald-600 font-bold">0 hs (Prod)</span>` : `${t.duracion} hs`;
+                    
+                    let btnSacarText = t.grupoId ? `<i class="fa-solid fa-xmark mr-1"></i> Sacar Grupo` : `<i class="fa-solid fa-xmark mr-1"></i> Sacar`;
 
                     let botones = planCongelado ? '' : `
                         <button onclick="marcarCumplida('${t.id}', this)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm">Cumplida</button>
-                        <button onclick="sacarDelPlan('${t.id}')" class="bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 px-2.5 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm"><i class="fa-solid fa-xmark mr-1"></i> Sacar</button>
+                        <button onclick="sacarDelPlan('${t.id}', '${t.grupoId || ''}')" class="bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 px-2.5 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm">${btnSacarText}</button>
                     `;
 
                     if (historialLT[t.id] === fechaSimulada) {
@@ -720,7 +738,6 @@
             renderizarBanco();
         }
 
-        // BANCO CON ORDEN DE PRIORIDAD
         function renderizarBanco() {
             let tbody = document.getElementById('tablaBanco');
             if(!tbody) return;
@@ -759,6 +776,8 @@
                     estadoTag = `<span class="bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs px-2.5 py-1 rounded-full font-bold"><i class="fa-solid fa-calendar-check mr-1"></i> Al día</span>`;
                 }
 
+                let btnSumarText = t.grupoId ? `<i class="fa-solid fa-plus mr-1"></i> Sumar Grupo` : `<i class="fa-solid fa-plus mr-1"></i> Sumar`;
+
                 tbody.innerHTML += `
                     <tr class="hover:bg-gray-50 border-b border-gray-100">
                         <td class="p-3">${estadoTag}</td>
@@ -766,22 +785,35 @@
                         <td class="p-3"><span class="px-2.5 py-1 rounded-md text-xs font-bold border ${badgeLinea}">${t.linea}</span></td>
                         <td class="p-3 text-gray-700 font-medium">${durVisual}</td>
                         <td class="p-3 text-right">
-                            <button onclick="sumarAlPlan('${t.id}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm">
-                                <i class="fa-solid fa-plus mr-1"></i> Sumar
+                            <button onclick="sumarAlPlan('${t.id}', '${t.grupoId || ''}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm">
+                                ${btnSumarText}
                             </button>
                         </td>
                     </tr>`;
             });
         }
 
-        function sacarDelPlan(id) {
-            db.ref(`lt_data/ajustesDiarios/${fechaSimulada}/${id}`).set('sacada');
-            animarRecalculo();
+        // ARREGLO AGRUPAMIENTO: Agrega todo el grupo a ajustesDiarios
+        function sacarDelPlan(id, grupoId) {
+            if (!ajustesDiarios[fechaSimulada]) ajustesDiarios[fechaSimulada] = {};
+            ajustesDiarios[fechaSimulada][id] = 'sacada';
+            
+            if (grupoId && grupoId !== 'null' && grupoId !== 'undefined') {
+                ajustesDiarios[fechaSimulada]['GRP_' + grupoId] = 'sacada';
+            }
+            
+            db.ref(`lt_data/ajustesDiarios/${fechaSimulada}`).set(ajustesDiarios[fechaSimulada]).then(() => animarRecalculo());
         }
 
-        function sumarAlPlan(id) {
-            db.ref(`lt_data/ajustesDiarios/${fechaSimulada}/${id}`).set('agregada');
-            animarRecalculo();
+        function sumarAlPlan(id, grupoId) {
+            if (!ajustesDiarios[fechaSimulada]) ajustesDiarios[fechaSimulada] = {};
+            ajustesDiarios[fechaSimulada][id] = 'agregada';
+            
+            if (grupoId && grupoId !== 'null' && grupoId !== 'undefined') {
+                ajustesDiarios[fechaSimulada]['GRP_' + grupoId] = 'agregada';
+            }
+            
+            db.ref(`lt_data/ajustesDiarios/${fechaSimulada}`).set(ajustesDiarios[fechaSimulada]).then(() => animarRecalculo());
         }
 
         function copiarParteDiario(btn) {
@@ -799,7 +831,6 @@
             db.ref('lt_data/reprogramadasLT/' + id).remove();
         }
 
-        // MATRIZ DEL MES CON FILAS Y COLUMNAS STICKY CONGELADAS
         function generarMatrizMes() {
             let tbody = document.getElementById('tablaAuditoria');
             if(!tbody || !baseTareas.length) return;
