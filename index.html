@@ -48,11 +48,11 @@
         <div id="view-dashboard" class="p-6 space-y-6">
             <div class="flex space-x-2 border-b pb-4 overflow-x-auto" id="botonesDias"></div>
 
-            <div id="panelCongelado" class="hidden bg-emerald-50 border border-emerald-300 p-4 rounded-lg flex justify-between items-center shadow-sm">
-                <span class="text-emerald-800 font-bold flex items-center">
-                    <i class="fa-solid fa-lock mr-2 text-emerald-600 text-lg"></i> Este plan fue guardado y está bloqueado.
+            <div id="panelCongelado" class="hidden bg-emerald-50 border border-emerald-300 p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-sm">
+                <span class="text-emerald-800 font-bold flex items-center text-sm">
+                    <i class="fa-solid fa-lock mr-2 text-emerald-600 text-lg"></i> Plan bloqueado: la estructura está protegida, pero podés marcar las tareas cumplidas.
                 </span>
-                <button onclick="descongelarPlan()" class="bg-white border border-emerald-400 px-4 py-2 rounded-lg text-sm text-emerald-700 font-bold hover:bg-emerald-100 btn-click shadow-sm">
+                <button onclick="descongelarPlan()" class="bg-white border border-emerald-400 px-4 py-2 rounded-lg text-sm text-emerald-700 font-bold hover:bg-emerald-100 btn-click shadow-sm whitespace-nowrap">
                     <i class="fa-solid fa-unlock mr-1.5"></i> Desbloquear y Modificar
                 </button>
             </div>
@@ -83,9 +83,14 @@
                         <h3 class="font-bold text-gray-800 text-lg inline-block">Plan del Día</h3>
                         <span id="horasUsadas" class="ml-3 text-xs font-bold text-gray-700 bg-gray-200 px-3 py-1 rounded-full border">Cargando...</span>
                     </div>
-                    <button onclick="copiarParteDiario(this)" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm btn-click transition flex items-center">
-                        <i class="fa-solid fa-copy mr-2"></i> Copiar para Excel
-                    </button>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="btnCompletarTodo" onclick="marcarTodoCumplido()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm btn-click transition flex items-center">
+                            <i class="fa-solid fa-check-double mr-2"></i> Marcar Todo Cumplido
+                        </button>
+                        <button onclick="copiarParteDiario(this)" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm btn-click transition flex items-center">
+                            <i class="fa-solid fa-copy mr-2"></i> Copiar para Excel
+                        </button>
+                    </div>
                 </div>
                 <div class="border rounded-xl overflow-hidden shadow-sm border-gray-200">
                     <table class="w-full text-left text-sm border-collapse">
@@ -248,7 +253,6 @@
         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
         const diasMapa = {"1": "Lunes", "2": "Martes", "3": "Miércoles", "4": "Jueves", "5": "Viernes"};
 
-        // CORRECCIÓN INICIO: Renderizamos los días apenas abre la app
         renderizarBotonesDias();
 
         function limpiarTexto(str) {
@@ -395,13 +399,15 @@
             if (planActualVista.length === 0) return alert("No hay tareas en el plan para guardar.");
             let planObj = {};
             planActualVista.forEach(t => planObj[t.id] = true);
-            db.ref('lt_data/planesGuardados/' + fechaSimulada).set(planObj);
+            planesGuardados[fechaSimulada] = planObj;
             animarRecalculo();
+            db.ref('lt_data/planesGuardados/' + fechaSimulada).set(planObj);
         }
 
         function descongelarPlan() {
-            db.ref('lt_data/planesGuardados/' + fechaSimulada).remove();
+            delete planesGuardados[fechaSimulada];
             animarRecalculo();
+            db.ref('lt_data/planesGuardados/' + fechaSimulada).remove();
         }
 
         function restablecerSugerido() {
@@ -413,13 +419,109 @@
             });
         }
 
+        let fileInput = document.getElementById('fileImport');
+        if(fileInput) {
+            fileInput.addEventListener('change', function(e) {
+                let file = e.target.files[0];
+                if(!file) return;
+                let reader = new FileReader();
+                reader.onload = function(ev) {
+                    let wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', cellDates: true});
+                    let sheet = wb.Sheets[wb.SheetNames[0]];
+                    let json = XLSX.utils.sheet_to_json(sheet, {header: 1});
+                    if(json.length < 3) return;
+
+                    let headerRow = 1;
+                    let headers = json[headerRow].map(h => limpiarTexto(String(h || "")).toLowerCase());
+                    let cLin = headers.findIndex(h => h.includes('linea') || h.includes('línea'));
+                    let cMaq = headers.findIndex(h => h.includes('zona') || h.includes('maquina'));
+                    let cAct = headers.findIndex(h => h.includes('actividad') || h.includes('tarea'));
+                    let cDur = headers.findIndex(h => h.includes('tiempo') || h.includes('hs'));
+                    let cFre = headers.findIndex(h => h.includes('frecuencia') || h.includes('frec'));
+                    
+                    let nuevasTareas = [];
+                    let nuevoHistorial = { ...historialLT };
+
+                    function parseExcelDateEx(excelDate) {
+                        if(!excelDate) return null;
+                        if(excelDate instanceof Date) {
+                            let y = excelDate.getFullYear();
+                            let m = String(excelDate.getMonth() + 1).padStart(2, '0');
+                            let d = String(excelDate.getDate()).padStart(2, '0');
+                            return `${y}-${m}-${d}`;
+                        }
+                        if(typeof excelDate === 'number') {
+                            let jsDate = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
+                            jsDate.setMinutes(jsDate.getMinutes() + jsDate.getTimezoneOffset());
+                            let y = jsDate.getFullYear();
+                            let m = String(jsDate.getMonth() + 1).padStart(2, '0');
+                            let d = String(jsDate.getDate()).padStart(2, '0');
+                            return `${y}-${m}-${d}`;
+                        }
+                        if(typeof excelDate === 'string') {
+                            let match = excelDate.match(/(\d{4})-(\d{2})-(\d{2})/);
+                            if(match) return match[0];
+                        }
+                        return null;
+                    }
+
+                    for(let i = headerRow + 1; i < json.length; i++) { 
+                        if(!json[i] || json[i].length === 0) continue; 
+                        let valLinea = limpiarTexto(String(json[i][cLin] || ""));
+                        if(!valLinea || valLinea.toLowerCase() === 'linea') continue;
+
+                        let maquina = limpiarTexto(String(json[i][cMaq] || "-"));
+                        let actividad = limpiarTexto(String(json[i][cAct] || "-"));
+                        let idFijo = generarIdTarea(valLinea, maquina, actividad);
+                        let durStr = String(json[i][cDur] || '0.5').replace(',','.');
+                        
+                        nuevasTareas.push({
+                            id: idFijo, linea: valLinea, maquina: maquina, actividad: actividad, 
+                            duracion: parseFloat(durStr) || 0.5, frecuencia: parseInt(json[i][cFre]) || 7 
+                        });
+
+                        let ultimaFechaValida = null;
+                        let maxCols = Math.max(json[0].length, json[i].length);
+                        
+                        for (let col = maxCols - 1; col > cFre; col--) {
+                            let celdaEstado = limpiarTexto(String(json[i][col] || "")).toLowerCase();
+                            if (celdaEstado === 'realizado' || celdaEstado === 'ok' || celdaEstado === 'hecho' || celdaEstado === 'x') {
+                                for (let c = col; c >= cFre; c--) { 
+                                    for (let r = headerRow; r >= 0; r--) { 
+                                        if (json[r] && json[r][c]) {
+                                            let parsed = parseExcelDateEx(json[r][c]);
+                                            if (parsed) { ultimaFechaValida = parsed; break; }
+                                        }
+                                    }
+                                    if (ultimaFechaValida) break;
+                                }
+                                if (ultimaFechaValida) break; 
+                            }
+                        }
+                        if (ultimaFechaValida) {
+                            nuevoHistorial[idFijo] = ultimaFechaValida;
+                            delete reprogramadasLT[idFijo];
+                        } else {
+                            delete nuevoHistorial[idFijo];
+                        }
+                    }
+                    document.getElementById('statusImport').classList.remove('hidden');
+                    db.ref('lt_data/baseTareas').set(nuevasTareas);
+                    db.ref('lt_data/historialLT').set(nuevoHistorial).then(() => {
+                        setTimeout(() => { document.getElementById('statusImport').classList.add('hidden'); switchTab('dashboard'); }, 2000);
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
         function animarRecalculo() {
             let tbody = document.getElementById('tablaTareas');
             if(tbody) tbody.style.opacity = '0.5';
             setTimeout(() => {
                 recalcularPlan();
                 if(tbody) tbody.style.opacity = '1';
-            }, 200); 
+            }, 150); 
         }
 
         function recalcularPlan() {
@@ -427,10 +529,12 @@
             let lblHoras = document.getElementById('horasUsadas');
             let pCongelado = document.getElementById('panelCongelado');
             let pControles = document.getElementById('panelControles');
+            let btnCompletarTodo = document.getElementById('btnCompletarTodo');
 
             if(!tbody) return;
             if(!baseTareas || baseTareas.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500">Sin datos. Subí tu Excel.</td></tr>';
+                if (btnCompletarTodo) btnCompletarTodo.classList.add('hidden');
                 return;
             }
 
@@ -458,17 +562,14 @@
                 return { ...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esProd: esAGVKP1, grupoId: autoGrupoId, esFijadaHoy: false };
             });
 
-            // CORRECCIÓN REGLAS: Grupos por comas y asignación universal
             for(let regla of reglasGrupos) {
                 if(!regla || !regla.keyword) continue;
                 
-                // Dividimos por coma para buscar combinaciones (ej: elevador, urea, paletizada)
                 let keywords = regla.keyword.toUpperCase().split(',').map(k => k.trim()).filter(k => k !== '');
                 let diaRequerido = regla.diaSemana !== "" ? parseInt(regla.diaSemana) : null;
                 
                 let filtradas = tareasEvaluadas.filter(t => {
                     let desc = (t.maquina + " " + t.actividad).toUpperCase();
-                    // Si la tarea coincide con AL MENOS UNA de las palabras clave separadas por coma, entra.
                     return keywords.some(k => desc.includes(k));
                 });
 
@@ -476,15 +577,12 @@
 
                 let diaValido = (diaRequerido === null) || (diaSemanaSimulado === diaRequerido);
                 
-                // ASIGNAR EL GRUPO SIEMPRE (aunque no toque hoy, así sale agrupado en el banco)
                 filtradas.forEach(t => {
                     t.grupoId = regla.keyword;
                     if(regla.esProd) t.esProd = true;
-                    // Si es un día forzado y NO es hoy, le apagamos el tocaHoy.
                     if(!diaValido) t.tocaHoy = false;
                 });
 
-                // Si el día es válido y AL MENOS UNA tarea del grupo toca hoy, arrastra a todas
                 if(diaValido && filtradas.some(t => t.tocaHoy)) {
                     filtradas.forEach(t => {
                         t.tocaHoy = true; 
@@ -621,6 +719,11 @@
                 lblHoras.innerHTML = `Consumo: ${hTotal.toFixed(1)} / ${capHoras} hs`;
             }
 
+            let hayPendientesEnPlan = planActualVista.some(t => historialLT[t.id] !== fechaSimulada);
+            if (btnCompletarTodo) {
+                btnCompletarTodo.classList.toggle('hidden', !hayPendientesEnPlan || planActualVista.length === 0);
+            }
+
             tbody.innerHTML = '';
             if(planActualVista.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500 font-bold">Plan vacío. Sumá tareas desde el Banco de Pendientes.</td></tr>';
@@ -631,13 +734,19 @@
                     
                     let btnSacarText = t.grupoId ? `<i class="fa-solid fa-xmark mr-1"></i> Sacar Grupo` : `<i class="fa-solid fa-xmark mr-1"></i> Sacar`;
 
-                    let botones = planCongelado ? '' : `
-                        <button onclick="marcarCumplida('${t.id}', this)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm">Cumplida</button>
-                        <button onclick="sacarDelPlan('${t.id}', '${t.grupoId || ''}')" class="bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 px-2.5 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm">${btnSacarText}</button>
-                    `;
+                    // Si el plan está bloqueado, solo ocultamos "Sacar", pero SIEMPRE permitimos marcar "Cumplida"
+                    let btnCumplida = `<button onclick="marcarCumplida('${t.id}')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm"><i class="fa-solid fa-check mr-1"></i> Cumplida</button>`;
+                    let btnSacar = planCongelado ? '' : `<button onclick="sacarDelPlan('${t.id}', '${t.grupoId || ''}')" class="bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 px-2.5 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm">${btnSacarText}</button>`;
+                    let botones = `${btnCumplida} ${btnSacar}`;
 
                     if (historialLT[t.id] === fechaSimulada) {
-                        botones = `<span class="text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full text-xs font-bold border border-emerald-200"><i class="fa-solid fa-check mr-1"></i> Realizada</span>`;
+                        botones = `
+                            <span class="text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full text-xs font-bold border border-emerald-200 inline-flex items-center">
+                                <i class="fa-solid fa-check mr-1"></i> Realizada
+                            </span>
+                            <button onclick="desmarcarCumplida('${t.id}')" class="text-gray-400 hover:text-red-600 px-2 py-1 rounded text-xs font-medium transition" title="Deshacer cumplimiento">
+                                <i class="fa-solid fa-rotate-left"></i>
+                            </button>`;
                     }
 
                     tbody.innerHTML += `
@@ -645,7 +754,7 @@
                             <td class="p-3 font-medium text-gray-800">${t.maquina}<br><span class="text-xs text-gray-500 font-normal">${t.actividad}</span></td>
                             <td class="p-3"><span class="px-2.5 py-1 rounded-md text-xs font-bold border ${badgeLinea}">${t.linea}</span></td>
                             <td class="p-3 text-gray-700 font-medium">${durVisual}</td>
-                            <td class="p-3 text-right space-x-1">${botones}</td>
+                            <td class="p-3 text-right space-x-1 whitespace-nowrap">${botones}</td>
                         </tr>`;
                 });
             }
@@ -739,10 +848,34 @@
             });
         }
 
-        function marcarCumplida(id, btn) {
-            btn.parentElement.innerHTML = `<span class="text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full text-xs font-bold border border-emerald-200"><i class="fa-solid fa-check mr-1"></i> Realizada</span>`;
+        function marcarCumplida(id) {
+            historialLT[id] = fechaSimulada;
+            delete reprogramadasLT[id];
+            recalcularPlan();
             db.ref('lt_data/historialLT/' + id).set(fechaSimulada);
             db.ref('lt_data/reprogramadasLT/' + id).remove();
+        }
+
+        function desmarcarCumplida(id) {
+            delete historialLT[id];
+            recalcularPlan();
+            db.ref('lt_data/historialLT/' + id).remove();
+        }
+
+        function marcarTodoCumplido() {
+            let updatesHistorial = {};
+            planActualVista.forEach(t => {
+                if (historialLT[t.id] !== fechaSimulada) {
+                    historialLT[t.id] = fechaSimulada;
+                    delete reprogramadasLT[t.id];
+                    updatesHistorial[t.id] = fechaSimulada;
+                    db.ref('lt_data/reprogramadasLT/' + t.id).remove();
+                }
+            });
+            if (Object.keys(updatesHistorial).length > 0) {
+                recalcularPlan();
+                db.ref('lt_data/historialLT').update(updatesHistorial);
+            }
         }
 
         function generarMatrizMes() {
@@ -768,6 +901,33 @@
                 tb += `</tr>`;
             });
             tbody.innerHTML = tb;
+        }
+
+        function exportarReporte() {
+            if (!baseTareas.length) return alert("No hay datos para exportar.");
+            let [y, m] = getFechaHoy().split('-');
+            let dias = new Date(y, m, 0).getDate();
+
+            let filas = baseTareas.map(t => {
+                let row = {
+                    "Línea": t.linea,
+                    "Máquina": t.maquina,
+                    "Actividad": t.actividad,
+                    "Duración (hs)": t.duracion,
+                    "Frecuencia (días)": t.frecuencia,
+                    "Última Ejecución": historialLT[t.id] || "-"
+                };
+                for (let i = 1; i <= dias; i++) {
+                    let dStr = `${y}-${m}-${String(i).padStart(2, '0')}`;
+                    row[String(i)] = (historialLT[t.id] === dStr) ? "X" : "";
+                }
+                return row;
+            });
+
+            let ws = XLSX.utils.json_to_sheet(filas);
+            let wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, `Matriz_${y}_${m}`);
+            XLSX.writeFile(wb, `Matriz_Cumplimiento_LT_${y}-${m}.xlsx`);
         }
 
         function agregarGrupo() {
