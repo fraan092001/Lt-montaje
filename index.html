@@ -50,7 +50,7 @@
 
             <div id="panelCongelado" class="hidden bg-emerald-50 border border-emerald-300 p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-sm">
                 <span class="text-emerald-800 font-bold flex items-center text-sm">
-                    <i class="fa-solid fa-lock mr-2 text-emerald-600 text-lg"></i> Plan bloqueado: la estructura está protegida, pero podés marcar las tareas cumplidas.
+                    <i class="fa-solid fa-lock mr-2 text-emerald-600 text-lg"></i> Plan guardado y bloqueado: estas tareas ya no se sugerirán en los días siguientes.
                 </span>
                 <button onclick="descongelarPlan()" class="bg-white border border-emerald-400 px-4 py-2 rounded-lg text-sm text-emerald-700 font-bold hover:bg-emerald-100 btn-click shadow-sm whitespace-nowrap">
                     <i class="fa-solid fa-unlock mr-1.5"></i> Desbloquear y Modificar
@@ -270,6 +270,32 @@
             return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
         }
 
+        function diffDiasStr(fechaA, fechaB) {
+            let [y1, m1, d1] = fechaA.split('-').map(Number);
+            let [y2, m2, d2] = fechaB.split('-').map(Number);
+            let utc1 = Date.UTC(y1, m1 - 1, d1);
+            let utc2 = Date.UTC(y2, m2 - 1, d2);
+            return Math.floor((utc1 - utc2) / (1000 * 60 * 60 * 24));
+        }
+
+        function nombreDiaCorto(fechaStr) {
+            let [y, m, d] = fechaStr.split('-').map(Number);
+            let dt = new Date(y, m - 1, d);
+            return diasSemana[dt.getDay()];
+        }
+
+        // Devuelve las fechas de otros días donde esta tarea ya está incluida en un plan guardado
+        function obtenerFechasPlanificadasOtrosDias(taskId, fechaExcluir) {
+            let fechas = [];
+            for (let fecha in planesGuardados) {
+                if (fecha === fechaExcluir) continue;
+                if (planesGuardados[fecha] && planesGuardados[fecha][taskId]) {
+                    fechas.push(fecha);
+                }
+            }
+            return fechas.sort();
+        }
+
         db.ref('lt_data').on('value', (snapshot) => {
             const data = snapshot.val() || {};
             baseTareas = (data.baseTareas || []).map(t => ({
@@ -383,7 +409,8 @@
                 let dateStr = iterDate.toISOString().split('T')[0];
                 let btnClass = (dateStr === fechaSimulada) ? 'day-active' : 'day-inactive';
                 let indicator = (dateStr === hoyStr) ? ' (Hoy)' : '';
-                html += `<button onclick="seleccionarDia('${dateStr}')" class="px-4 py-2 text-sm rounded-lg border ${btnClass} shadow-sm transition btn-click whitespace-nowrap font-medium">${diasSemana[iterDate.getDay()]}${indicator}</button>`;
+                let lockIcon = planesGuardados[dateStr] ? '<i class="fa-solid fa-lock text-xs mr-1.5 opacity-80"></i>' : '';
+                html += `<button onclick="seleccionarDia('${dateStr}')" class="px-4 py-2 text-sm rounded-lg border ${btnClass} shadow-sm transition btn-click whitespace-nowrap font-medium inline-flex items-center">${lockIcon}${diasSemana[iterDate.getDay()]}${indicator}</button>`;
             }
             let contenedor = document.getElementById('botonesDias');
             if(contenedor) contenedor.innerHTML = html;
@@ -400,13 +427,13 @@
             let planObj = {};
             planActualVista.forEach(t => planObj[t.id] = true);
             planesGuardados[fechaSimulada] = planObj;
-            animarRecalculo();
+            renderizarBotonesDias();
             db.ref('lt_data/planesGuardados/' + fechaSimulada).set(planObj);
         }
 
         function descongelarPlan() {
             delete planesGuardados[fechaSimulada];
-            animarRecalculo();
+            renderizarBotonesDias();
             db.ref('lt_data/planesGuardados/' + fechaSimulada).remove();
         }
 
@@ -549,17 +576,42 @@
             let tareasEvaluadas = baseTareas.map(t => {
                 let ultVez = historialLT[t.id];
                 let movidaPara = reprogramadasLT[t.id];
-                let diasPasados = ultVez ? Math.floor((new Date(fechaSimulada) - new Date(ultVez)) / (1000*60*60*24)) : 999;
-                
+                let fechasPlanificadas = obtenerFechasPlanificadasOtrosDias(t.id, fechaSimulada);
+
+                // Fecha efectiva más reciente entre ejecución real y planes guardados previos o iguales a fechaSimulada
+                let refUltima = ultVez || null;
+                fechasPlanificadas.forEach(fPlan => {
+                    if (fPlan <= fechaSimulada && (!refUltima || fPlan > refUltima)) {
+                        refUltima = fPlan;
+                    }
+                });
+
+                let diasPasados = refUltima ? diffDiasStr(fechaSimulada, refUltima) : 999;
                 let tocaHoy = (movidaPara === fechaSimulada) || (diasPasados >= t.frecuencia);
-                if(ultVez && ultVez >= fechaSimulada) tocaHoy = false;
+                if (refUltima && refUltima >= fechaSimulada) tocaHoy = false;
+
+                // Si ya está comprometida en otro día planificado de esta semana y no volvió a vencer, no la sugerimos de nuevo
+                let yaPlanificadaOtroDia = fechasPlanificadas.some(fPlan => Math.abs(diffDiasStr(fechaSimulada, fPlan)) < t.frecuencia);
+                if (yaPlanificadaOtroDia && movidaPara !== fechaSimulada) {
+                    tocaHoy = false;
+                }
 
                 let descGrupo = (t.maquina + " " + t.actividad).toUpperCase();
                 let matchG = descGrupo.match(/\(M\d+\)/);
                 let autoGrupoId = matchG ? matchG[0].replace(/[\(\)]/g, '') : null; 
                 let esAGVKP1 = descGrupo.includes("AGV") && t.linea.toUpperCase().includes("KP1");
 
-                return { ...t, diasPasados, tocaHoy, esRepro: (movidaPara === fechaSimulada), esProd: esAGVKP1, grupoId: autoGrupoId, esFijadaHoy: false };
+                return { 
+                    ...t, 
+                    diasPasados, 
+                    tocaHoy, 
+                    esRepro: (movidaPara === fechaSimulada), 
+                    esProd: esAGVKP1, 
+                    grupoId: autoGrupoId, 
+                    esFijadaHoy: false,
+                    yaPlanificadaOtroDia,
+                    fechasPlanificadas
+                };
             });
 
             for(let regla of reglasGrupos) {
@@ -583,10 +635,12 @@
                     if(!diaValido) t.tocaHoy = false;
                 });
 
-                if(diaValido && filtradas.some(t => t.tocaHoy)) {
+                if(diaValido && filtradas.some(t => t.tocaHoy && !t.yaPlanificadaOtroDia)) {
                     filtradas.forEach(t => {
-                        t.tocaHoy = true; 
-                        t.esFijadaHoy = true; 
+                        if (!t.yaPlanificadaOtroDia) {
+                            t.tocaHoy = true; 
+                            t.esFijadaHoy = true; 
+                        }
                     });
                 }
             }
@@ -594,17 +648,23 @@
             let statsGrupo = {};
             tareasEvaluadas.forEach(t => {
                 if(t.grupoId && !t.esProd) {
-                    if(!statsGrupo[t.grupoId]) statsGrupo[t.grupoId] = { maxDias: -1, tocaHoy: false, duracionSum: 0 };
-                    if(t.diasPasados > statsGrupo[t.grupoId].maxDias) statsGrupo[t.grupoId].maxDias = t.diasPasados;
-                    if(t.tocaHoy || t.esFijadaHoy) statsGrupo[t.grupoId].tocaHoy = true;
+                    if(!statsGrupo[t.grupoId]) statsGrupo[t.grupoId] = { maxDias: -1, tocaHoy: false, duracionSum: 0, bloqueadoPorOtroDia: false };
+                    if(!t.yaPlanificadaOtroDia && t.diasPasados > statsGrupo[t.grupoId].maxDias) {
+                        statsGrupo[t.grupoId].maxDias = t.diasPasados;
+                    }
+                    if((t.tocaHoy || t.esFijadaHoy) && !t.yaPlanificadaOtroDia) statsGrupo[t.grupoId].tocaHoy = true;
+                    if(t.yaPlanificadaOtroDia) statsGrupo[t.grupoId].bloqueadoPorOtroDia = true;
                     statsGrupo[t.grupoId].duracionSum += t.duracion;
                 }
             });
 
             tareasEvaluadas.forEach(t => {
                 if(t.grupoId && !t.esProd) {
-                    t.diasPasados = statsGrupo[t.grupoId].maxDias;
-                    if (statsGrupo[t.grupoId].tocaHoy) { t.tocaHoy = true; t.esFijadaHoy = true; }
+                    if(statsGrupo[t.grupoId].maxDias >= 0) t.diasPasados = statsGrupo[t.grupoId].maxDias;
+                    if (statsGrupo[t.grupoId].tocaHoy && !t.yaPlanificadaOtroDia) { 
+                        t.tocaHoy = true; 
+                        t.esFijadaHoy = true; 
+                    }
                 }
             });
 
@@ -649,25 +709,32 @@
 
                     if (estadoAjuste === 'sacada') continue; 
 
+                    // Si fue agregada manualmente por el usuario hoy, entra siempre
+                    if (estadoAjuste === 'agregada') {
+                        sugSet.add(t.id);
+                        if (!t.esProd) {
+                            let esCronosMan = t.linea.toUpperCase().includes('CRONOS');
+                            if (esCronosMan) hC += t.duracion; else hK += t.duracion;
+                            hSugSum += t.duracion;
+                        }
+                        continue;
+                    }
+
+                    // Si ya está guardada en el plan de otro día de la semana, no la sugerimos automáticamente
+                    if (t.yaPlanificadaOtroDia) continue;
+
                     let esCronos = t.linea.toUpperCase().includes('CRONOS');
                     if (esCronos && pctCronos === 0) continue;
                     if (!esCronos && pctCronos === 100) continue;
 
                     if (t.esProd) {
-                        if (t.tocaHoy || estadoAjuste === 'agregada') sugSet.add(t.id);
-                        continue;
-                    }
-
-                    if (estadoAjuste === 'agregada') {
-                        sugSet.add(t.id);
-                        if (esCronos) hC += t.duracion; else hK += t.duracion;
-                        hSugSum += t.duracion;
+                        if (t.tocaHoy) sugSet.add(t.id);
                         continue;
                     }
 
                     let entra = false;
                     if (t.grupoId) {
-                        if (gruposRechazados.has(t.grupoId)) continue;
+                        if (gruposRechazados.has(t.grupoId) || statsGrupo[t.grupoId].bloqueadoPorOtroDia) continue;
                         if (gruposAceptados.has(t.grupoId)) {
                             entra = true;
                         } else {
@@ -734,7 +801,6 @@
                     
                     let btnSacarText = t.grupoId ? `<i class="fa-solid fa-xmark mr-1"></i> Sacar Grupo` : `<i class="fa-solid fa-xmark mr-1"></i> Sacar`;
 
-                    // Si el plan está bloqueado, solo ocultamos "Sacar", pero SIEMPRE permitimos marcar "Cumplida"
                     let btnCumplida = `<button onclick="marcarCumplida('${t.id}')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm"><i class="fa-solid fa-check mr-1"></i> Cumplida</button>`;
                     let btnSacar = planCongelado ? '' : `<button onclick="sacarDelPlan('${t.id}', '${t.grupoId || ''}')" class="bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 px-2.5 py-1.5 rounded-md text-xs font-bold btn-click shadow-sm">${btnSacarText}</button>`;
                     let botones = `${btnCumplida} ${btnSacar}`;
@@ -774,7 +840,10 @@
                 t.linea.toLowerCase().includes(filtro)
             );
 
+            // Las ya planificadas en otro día van al final para priorizar lo que realmente falta asignar
             filtrados.sort((a, b) => {
+                if (a.yaPlanificadaOtroDia && !b.yaPlanificadaOtroDia) return 1;
+                if (!a.yaPlanificadaOtroDia && b.yaPlanificadaOtroDia) return -1;
                 let atrasoA = a.diasPasados - a.frecuencia;
                 let atrasoB = b.diasPasados - b.frecuencia;
                 return atrasoB - atrasoA;
@@ -792,7 +861,10 @@
 
                 let estadoTag = '';
                 let diasAtraso = t.diasPasados - t.frecuencia;
-                if (diasAtraso > 0) {
+                if (t.yaPlanificadaOtroDia) {
+                    let diasTexto = t.fechasPlanificadas.map(nombreDiaCorto).join(', ');
+                    estadoTag = `<span class="bg-blue-100 text-blue-800 border border-blue-200 text-xs px-2.5 py-1 rounded-full font-bold"><i class="fa-solid fa-calendar-day mr-1"></i> Planificada (${diasTexto})</span>`;
+                } else if (diasAtraso > 0) {
                     estadoTag = `<span class="bg-red-100 text-red-800 border border-red-200 text-xs px-2.5 py-1 rounded-full font-bold"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Atrasada (${diasAtraso}d)</span>`;
                 } else if (t.tocaHoy) {
                     estadoTag = `<span class="bg-amber-100 text-amber-800 border border-amber-200 text-xs px-2.5 py-1 rounded-full font-bold"><i class="fa-solid fa-clock mr-1"></i> Toca Hoy</span>`;
@@ -803,7 +875,7 @@
                 let btnSumarText = t.grupoId ? `<i class="fa-solid fa-plus mr-1"></i> Sumar Grupo` : `<i class="fa-solid fa-plus mr-1"></i> Sumar`;
 
                 tbody.innerHTML += `
-                    <tr class="hover:bg-gray-50 border-b border-gray-100">
+                    <tr class="hover:bg-gray-50 border-b border-gray-100 ${t.yaPlanificadaOtroDia ? 'opacity-70 bg-gray-50/50' : ''}">
                         <td class="p-3">${estadoTag}</td>
                         <td class="p-3 font-medium text-gray-800">${t.maquina}<br><span class="text-xs text-gray-500 font-normal">${t.actividad}</span></td>
                         <td class="p-3"><span class="px-2.5 py-1 rounded-md text-xs font-bold border ${badgeLinea}">${t.linea}</span></td>
